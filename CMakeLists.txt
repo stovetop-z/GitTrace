@@ -16,6 +16,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Load the libgit2 configuration and imported targets
 find_package(libgit2 CONFIG REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(TREE_SITTER REQUIRED IMPORTED_TARGET tree-sitter)
 
 set(LLAMA_BUILD_COMMON OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -28,8 +30,15 @@ add_subdirectory(llama.cpp)
 add_executable(GitTrace
     main.cc
     GitTrace/chunkdb/chunkdb.cpp
+    GitTrace/gittrace.cpp
+    GitTrace/utils/treesitter.cpp
 )
-target_link_libraries(GitTrace PRIVATE libgit2::libgit2package llama)
+target_link_libraries(GitTrace PRIVATE
+    libgit2::libgit2package
+    llama
+    PkgConfig::TREE_SITTER
+    ${CMAKE_DL_LIBS}
+)
 
 include(CTest)
 enable_testing()

@@ -1,4 +1,5 @@
 llama.cpp/
 GitTrace/chunkdb/embedder/
+GitTrace/rsc/grammars/
 build/
 .vscode/

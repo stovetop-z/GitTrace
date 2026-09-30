@@ -7,6 +7,9 @@ GitTrace is a C++ prototype for finding related text with vector embeddings. It 
 - CMake 3.10 or newer
 - A C++17 compiler
 - The [libgit2](https://libgit2.org/) development package
+- The Tree-sitter runtime development package and `pkg-config`
+- CMake and a C/C++ compiler available on `PATH` (used to build downloaded grammars)
+- Network access on the first run for each grammar used by the repository
 - The `llama.cpp` source directory included in this repository
 - The embedding model file described below
 
@@ -40,6 +43,12 @@ Run from the repository root so the relative model path resolves:
 ```
 
 The program prints whether initialization and each embedding succeeded, followed by up to three matching chunks. It exits with a nonzero status if initialization or embedding fails.
+
+## Git history grammar parsing
+
+`GitTrace::beginGitTrace()` reads unique text blob versions from the repository history, collects their filename extensions, and looks up each extension in `GitTrace/rsc/grammar.txt`. For each configured grammar it clones the repository into `GitTrace/rsc/grammars/`, builds the generated parser sources as a shared library, loads the library, and parses the collected blobs. Grammar source checkouts and build products are local and ignored by Git. Subsequent runs reuse those checkouts and libraries; to refresh a grammar, remove its directory under `GitTrace/rsc/grammars/`.
+
+This requires `tree-sitter` to be discoverable by `pkg-config` at configure time. On first use, CMake and a C/C++ toolchain must also be available on `PATH`, and the machine needs network access. Extensions absent from `grammar.txt` are skipped with a diagnostic. The manifest uses `extension = repository URL`, with optional `| source subdirectory | exported function` fields for repositories containing multiple parsers or keeping the parser below the repository root. When omitted, the source is read from the repository root and the exported function is inferred from the repository name (for example, `tree-sitter-cpp` maps to `tree_sitter_cpp`).
 
 ## Project layout
 

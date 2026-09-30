@@ -243,7 +243,9 @@ bool TreeSitter::install_and_load(const GrammarSpec& spec)
         return false;
     }
 
-    const fs::path cmake_file = build_dir / "CMakeLists.txt";
+    const fs::path absolute_build_dir = fs::absolute(build_dir);
+    const fs::path absolute_grammar_source_dir = fs::absolute(grammar_source_dir);
+    const fs::path cmake_file = absolute_build_dir / "CMakeLists.txt";
     {
         std::ofstream cmake(cmake_file, std::ios::trunc);
         cmake << "cmake_minimum_required(VERSION 3.10)\n"
@@ -258,13 +260,13 @@ bool TreeSitter::install_and_load(const GrammarSpec& spec)
         }
     }
 
-    const fs::path output_dir = build_dir / "artifacts";
+    const fs::path output_dir = absolute_build_dir / "artifacts";
     fs::create_directories(output_dir, ec);
     if (ec) return false;
-    const fs::path cmake_build_dir = build_dir / "cmake-build";
-    const std::string configure = "cmake -S " + shell_quote(build_dir.string()) +
+    const fs::path cmake_build_dir = absolute_build_dir / "cmake-build";
+    const std::string configure = "cmake -S " + shell_quote(absolute_build_dir.string()) +
         " -B " + shell_quote(cmake_build_dir.string()) +
-        " -DGRAMMAR_SOURCE_DIR=" + shell_quote(grammar_source_dir.string()) +
+        " -DGRAMMAR_SOURCE_DIR=" + shell_quote(absolute_grammar_source_dir.string()) +
         " -DOUTPUT_DIR=" + shell_quote(output_dir.string());
     if (std::system(configure.c_str()) != 0) {
         std::cerr << "CMake configuration failed for grammar " << name << '\n';

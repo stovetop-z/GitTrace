@@ -162,17 +162,19 @@ void GitTrace::beginGitTrace()
     const bool prepared = tree_sitter.prepare(extension_list);
     size_t parsed = 0;
     size_t failed = 0;
-    for (const auto& blob : blobs) {
-        if (tree_sitter.parse(blob.filepath,
-                              reinterpret_cast<const char*>(blob.raw_data.data()),
-                              blob.raw_data.size())) {
-            ++parsed;
-        } else {
-            ++failed;
+    for(const auto& blob : blobs) 
+    {
+        if(tree_sitter.parse(blob.filepath, reinterpret_cast<const char*>(blob.raw_data.data()), blob.raw_data.size())) 
+        {
+            parsed++;
+        } 
+        else 
+        {
+            failed++;
         }
     }
     std::cout << "Tree-sitter parsed " << parsed << " unique file versions";
-    if (failed) std::cout << "; " << failed << " unsupported or invalid";
-    std::cout << '\n';
-    if (!prepared) std::cerr << "One or more grammars were unavailable; see messages above\n";
+    if(failed) std::cout << "; " << failed << " unsupported or invalid";
+    std::cout << "\n";
+    if(!prepared) std::cerr << "One or more grammars were unavailable; see messages above\n";
 }

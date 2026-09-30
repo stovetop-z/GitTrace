@@ -1,0 +1,4 @@
+llama.cpp/
+GitTrace/chunkdb/embedder/
+build/
+.vscode/

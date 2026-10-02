@@ -102,7 +102,7 @@ bool LayaClient::rerank(const std::string& query,
     long status = 0;
     curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &status);
     if (status < 200 || status >= 300) {
-        error = "Laya service returned HTTP " + std::to_string(status);
+        error = "Reranker service returned HTTP " + std::to_string(status);
         if (!response.empty()) error += ": " + response;
         return false;
     }

@@ -64,7 +64,7 @@ void print_match(const ChunkMatch& match, std::size_t rank,
               << "  similarity=" << std::fixed << std::setprecision(4)
               << match.similarity;
     if (laya_match) {
-        std::cout << "  laya=" << laya_match->relevance
+        std::cout << "  relevance=" << laya_match->relevance
                   << " (confidence=" << std::setprecision(3) << laya_match->confidence << ')';
     }
     std::cout << "  commit=" << short_sha << '\n';
@@ -76,7 +76,7 @@ void run_query_prompt(GitTrace& trace, std::size_t top_k,
                       bool use_laya, const std::string& laya_url)
 {
     std::cout << "\nInteractive chunk search (enter :q to quit, :help for help).\n";
-    if (use_laya) std::cout << "Laya reranker: " << laya_url << '\n';
+    if (use_laya) std::cout << "Relevance reranker: " << laya_url << '\n';
     LayaClient laya(laya_url);
     std::string query;
     while (true) {
@@ -101,14 +101,14 @@ void run_query_prompt(GitTrace& trace, std::size_t top_k,
         if (use_laya) {
             std::vector<LayaMatch> reranked;
             std::string error;
-            std::cout << "Laya assessing " << matches.size() << " candidates...\n";
+            std::cout << "Reranker assessing " << matches.size() << " candidates...\n";
             if (laya.rerank(query, matches, reranked, error)) {
                 std::size_t accepted = 0;
                 for (const LayaMatch& match : reranked) if (match.accepted) ++accepted;
-                std::cout << "Laya accepted " << accepted << '/' << reranked.size()
+                std::cout << "Reranker accepted " << accepted << '/' << reranked.size()
                           << " candidates as relevant.\n";
                 if (accepted == 0) {
-                    std::cout << "No chunks passed Laya's relevance filter.\n";
+                    std::cout << "No chunks passed the relevance filter.\n";
                     continue;
                 }
                 std::size_t rank = 0;
@@ -119,7 +119,7 @@ void run_query_prompt(GitTrace& trace, std::size_t top_k,
                 }
                 continue;
             }
-            std::cerr << "Warning: could not reach Laya at " << laya_url
+            std::cerr << "Warning: could not reach the reranker at " << laya_url
                       << " (" << error << "). Showing vector results without reranking.\n";
         }
 

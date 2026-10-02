@@ -1,0 +1,24 @@
+{"query":"Where is the embedding model initialized?","path":"GitTrace/chunkdb/chunkdb.cpp","text":"bool ChunkDB::init() { model = llama_load_model_from_file(model_path, params); return model != nullptr; }","label":"direct"}
+{"query":"Where is the embedding model initialized?","path":"README.md","text":"The model file must be placed at GitTrace/chunkdb/embedder/bge-code-v1-q8_0.gguf before running.","label":"related"}
+{"query":"Where is the embedding model initialized?","path":"GitTrace/gittrace.cpp","text":"std::cout << \"Starting GitTrace scan\" << std::endl;","label":"irrelevant"}
+{"query":"How does the CLI contact the reranker?","path":"GitTrace/laya_client.cpp","text":"curl_easy_setopt(curl, CURLOPT_URL, endpoint.c_str()); curl_easy_setopt(curl, CURLOPT_POSTFIELDS, request_body.c_str());","label":"direct"}
+{"query":"How does the CLI contact the reranker?","path":"main.cc","text":"LayaClient laya(laya_url); if (!laya.rerank(query, matches, reranked, error)) ...","label":"related"}
+{"query":"How does the CLI contact the reranker?","path":"GitTrace/chunkdb/chunkdb.cpp","text":"float ChunkDB::similarity(const Chunk& a, const Chunk& b) { return dot(a.embedding, b.embedding); }","label":"irrelevant"}
+{"query":"What does --no-laya do?","path":"main.cc","text":"if (arg == \"--no-laya\") { use_laya = false; continue; }","label":"direct"}
+{"query":"What does --no-laya do?","path":"README.md","text":"Use --no-laya to bypass the service or --laya-url URL to change its endpoint.","label":"direct"}
+{"query":"What does --no-laya do?","path":"GitTrace/laya_client.h","text":"class LayaClient { public: bool rerank(const std::string& query, ...); };","label":"irrelevant"}
+{"query":"Which labels are accepted by the relevance classifier?","path":"laya_service.py","text":"DECISION_ORDER = {\"direct\": 0, \"related\": 1, \"irrelevant\": 2}","label":"direct"}
+{"query":"Which labels are accepted by the relevance classifier?","path":"laya_service.py","text":"min_rank = {\"direct\": 0, \"related\": 1, \"any\": 2}[body.min_relevance]","label":"related"}
+{"query":"Which labels are accepted by the relevance classifier?","path":"requirements-laya.txt","text":"fastapi>=0.115\nuvicorn>=0.30\nlaya>=0.3.23","label":"irrelevant"}
+{"query":"Where are unsupported file extensions skipped?","path":"GitTrace/gittrace.cpp","text":"if (grammar == grammars.end()) { std::cerr << \"No grammar configured for \" << extension << '\\n'; continue; }","label":"direct"}
+{"query":"Where are unsupported file extensions skipped?","path":"GitTrace/rsc/grammar.txt","text":"cpp = https://github.com/tree-sitter/tree-sitter-cpp","label":"related"}
+{"query":"Where are unsupported file extensions skipped?","path":"GitTrace/utils/treesitter.cpp","text":"TSParser* parser = ts_parser_new(); ts_parser_set_language(parser, language);","label":"irrelevant"}
+{"query":"What changed in the commit that introduced reranking?","path":"GitTrace/laya_client.cpp","text":"The current client posts candidates to /rerank and parses relevance and confidence from the response.","label":"irrelevant"}
+{"query":"What changed in the commit that introduced reranking?","path":"README.md","text":"After indexing, the CLI sends vector candidates to the local Laya service for relevance decisions.","label":"related"}
+{"query":"Does this chunk prove that a commit added POST /rerank support?","path":"GitTrace/laya_client.cpp","text":"Commit message: add POST /rerank support and parse direct, related, and irrelevant decisions.","label":"direct"}
+{"query":"How are grammar parser libraries loaded?","path":"GitTrace/utils/treesitter.cpp","text":"void* handle = dlopen(library_path.c_str(), RTLD_NOW); auto language_fn = reinterpret_cast<TSLanguageFunc>(dlsym(handle, symbol.c_str()));","label":"direct"}
+{"query":"How are grammar parser libraries loaded?","path":"GitTrace/rsc/grammar.txt","text":"py = https://github.com/tree-sitter/tree-sitter-python","label":"related"}
+{"query":"How are grammar parser libraries loaded?","path":"main.cc","text":"std::cout << \"GitTrace\" << std::endl;","label":"irrelevant"}
+{"query":"Where is the service's default port configured?","path":"laya_service.py","text":"port = int(os.environ.get(\"GITTRACE_LAYA_PORT\", \"8787\"))","label":"direct"}
+{"query":"Where is the service's default port configured?","path":"README.md","text":"It listens on 127.0.0.1:8787 by default.","label":"related"}
+{"query":"Where is the service's default port configured?","path":"GitTrace/laya_client.cpp","text":"curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L);","label":"irrelevant"}

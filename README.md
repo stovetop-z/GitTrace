@@ -45,7 +45,7 @@ Run from the repository root so the relative model and grammar paths resolve. Wi
 ./build/GitTrace --repo /path/to/repository --top-k 8
 ```
 
-After indexing, the CLI accepts natural-language or code queries. It retrieves a wider vector-search candidate set, then posts those candidates to the local Laya service for relevance decisions. It displays only candidates Laya accepts as `direct` or `related`; if the service is unavailable, it warns and displays the unreranked vector results. Use `--no-laya` to bypass the service or `--laya-url URL` to change its endpoint. `GITTRACE_LAYA_URL` can also set the endpoint. `--no-interactive` ends after indexing.
+After indexing, the CLI accepts natural-language or code queries. It retrieves a wider vector-search candidate set, then posts those candidates to the local reranking service for relevance decisions. It displays only candidates accepted as `direct` or `related`; if the service is unavailable, it warns and displays the unreranked vector results. Use `--no-laya` to bypass reranking or `--laya-url URL` to change the service endpoint. `GITTRACE_LAYA_URL` can also set the endpoint. `--no-interactive` ends after indexing.
 
 ## Git history grammar parsing
 
@@ -55,7 +55,9 @@ This requires `tree-sitter` to be discoverable by `pkg-config` at configure time
 
 ## Laya relevance service
 
-`laya_service.py` is a local HTTP sidecar for the C++ CLI. Start it before running an embedding-enabled GitTrace scan. GitTrace sends its vector-search candidates to `POST /rerank`; the service batches them through Laya and returns a `direct`, `related`, or `irrelevant` decision, confidence, original similarity, and an `accepted` flag. It listens on `127.0.0.1:8787` by default and loads the English checkpoint once when it starts. The checkpoint is downloaded the first time it is needed. Laya judges relevance; it does not prove that a chunk is factually correct.
+`laya_service.py` is a local HTTP sidecar for the C++ CLI. Start it before running an embedding-enabled GitTrace scan. GitTrace sends its vector-search candidates to `POST /rerank`; the selected backend returns a `direct`, `related`, or `irrelevant` decision, confidence, original similarity, and an `accepted` flag. It listens on `127.0.0.1:8787` by default. Laya is the default backend and loads its English checkpoint once when it starts. Laya judges relevance; neither backend proves that a chunk is factually correct.
+
+The relevance rubric distinguishes evidence from nearby context and incidental keyword matches. `training/laya_relevance.jsonl` contains hand-labeled seed examples in JSON Lines format (`query`, `path`, `text`, `label`) for refining that rubric and building a future task-specific training or evaluation pipeline. These examples do not fine-tune the downloaded checkpoint by themselves; runtime behavior currently comes from the rubric in `laya_service.py`.
 
 Install and start the service from the project root:
 
@@ -65,6 +67,19 @@ source .venv-laya/bin/activate
 python -m pip install -r requirements-laya.txt
 python laya_service.py
 ```
+
+To use Gemini instead of running Laya locally, install the optional Gemini dependencies and select the backend. Set an API key in `GOOGLE_API_KEY` or `GEMINI_API_KEY`; `GITTRACE_GEMINI_MODEL` optionally selects another Gemini model (default `gemini-3.8-flash`). Candidate source snippets and queries are sent to Google's Gemini API, so use this option only when that data sharing is appropriate. API usage may incur charges.
+
+```sh
+python3 -m venv .venv-gemini
+source .venv-gemini/bin/activate
+python -m pip install -r requirements-gemini.txt
+export GITTRACE_RERANKER=gemini
+export GOOGLE_API_KEY="your-api-key"
+python laya_service.py
+```
+
+Set `GITTRACE_RERANKER=laya` (the default) to use Laya instead. The C++ client and `/rerank` response format are the same for both backends. The Gemini backend groups candidates in small batches and requests structured JSON classifications.
 
 Check readiness at `GET http://127.0.0.1:8787/health`. The C++ client can post candidate chunks like this:
 
@@ -95,10 +110,10 @@ The response keeps each caller-provided `id`, so GitTrace can join the decisions
 ```text
 main.cc                   Git history scanner entry point
 GitTrace/chunkdb/         In-memory embedding and similarity search
-GitTrace/laya_client.*    HTTP client for the Laya relevance service
+GitTrace/laya_client.*    HTTP client for the relevance service
 GitTrace/utils/           Tree-sitter grammar loading and parsing
 GitTrace/rsc/grammar.txt   File-extension to grammar manifest
-laya_service.py           Local HTTP relevance reranker
+laya_service.py           Local Laya or Gemini relevance reranker
 llama.cpp/                llama.cpp dependency
 CMakeLists.txt            Build configuration
 ```

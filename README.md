@@ -7,6 +7,7 @@ GitTrace is a C++ prototype for analyzing source files across a Git repository's
 - CMake 3.10 or newer
 - A C++17 compiler
 - The [libgit2](https://libgit2.org/) development package
+- libcurl development files discoverable through `pkg-config`
 - The Tree-sitter runtime development package and `pkg-config`
 - CMake and a C/C++ compiler available on `PATH` (used to build downloaded grammars)
 - Network access on the first run for each grammar used by the repository
@@ -41,9 +42,10 @@ Run from the repository root so the relative model and grammar paths resolve. Wi
 ```sh
 ./build/GitTrace
 ./build/GitTrace /path/to/repository
+./build/GitTrace --repo /path/to/repository --top-k 8
 ```
 
-The program reports initialization, grammar setup and parsing results, and the number of unique text blob versions collected. It exits with a nonzero status if initialization fails.
+After indexing, the CLI accepts natural-language or code queries. It retrieves a wider vector-search candidate set, then posts those candidates to the local Laya service for relevance decisions. It displays only candidates Laya accepts as `direct` or `related`; if the service is unavailable, it warns and displays the unreranked vector results. Use `--no-laya` to bypass the service or `--laya-url URL` to change its endpoint. `GITTRACE_LAYA_URL` can also set the endpoint. `--no-interactive` ends after indexing.
 
 ## Git history grammar parsing
 
@@ -51,13 +53,52 @@ The program reports initialization, grammar setup and parsing results, and the n
 
 This requires `tree-sitter` to be discoverable by `pkg-config` at configure time. On first use, CMake and a C/C++ toolchain must also be available on `PATH`, and the machine needs network access. Extensions absent from `grammar.txt` are skipped with a diagnostic. The manifest uses `extension = repository URL`, with optional `| source subdirectory | exported function` fields for repositories containing multiple parsers or keeping the parser below the repository root. When omitted, the source is read from the repository root and the exported function is inferred from the repository name (for example, `tree-sitter-cpp` maps to `tree_sitter_cpp`).
 
+## Laya relevance service
+
+`laya_service.py` is a local HTTP sidecar for the C++ CLI. Start it before running an embedding-enabled GitTrace scan. GitTrace sends its vector-search candidates to `POST /rerank`; the service batches them through Laya and returns a `direct`, `related`, or `irrelevant` decision, confidence, original similarity, and an `accepted` flag. It listens on `127.0.0.1:8787` by default and loads the English checkpoint once when it starts. The checkpoint is downloaded the first time it is needed. Laya judges relevance; it does not prove that a chunk is factually correct.
+
+Install and start the service from the project root:
+
+```sh
+python3 -m venv .venv-laya
+source .venv-laya/bin/activate
+python -m pip install -r requirements-laya.txt
+python laya_service.py
+```
+
+Check readiness at `GET http://127.0.0.1:8787/health`. The C++ client can post candidate chunks like this:
+
+```sh
+curl -s http://127.0.0.1:8787/rerank \
+  -H 'content-type: application/json' \
+  -d '{
+    "query": "Where is the embedding model initialized?",
+    "min_relevance": "related",
+    "candidates": [
+      {
+        "id": "candidate-1",
+        "path": "GitTrace/chunkdb/chunkdb.cpp",
+        "text": "bool ChunkDB::init() { ... }",
+        "similarity": 0.62,
+        "commit_sha": "abc123",
+        "start_line": 15,
+        "end_line": 28
+      }
+    ]
+  }'
+```
+
+The response keeps each caller-provided `id`, so GitTrace can join the decisions back to its chunks. `min_relevance` accepts `direct`, `related` (the default), or `any`; every result is returned in relevance order with an `accepted` flag. Requests accept up to 64 candidates. The request's `max_len` defaults to 256 tokens to keep reranking responsive; the English checkpoint supports up to 512. Set `GITTRACE_LAYA_HOST` and `GITTRACE_LAYA_PORT` to change the bind address and port. Set `GITTRACE_LAYA_MODEL` or `GITTRACE_LAYA_SUBFOLDER` to select a different checkpoint.
+
 ## Project layout
 
 ```text
 main.cc                   Git history scanner entry point
 GitTrace/chunkdb/         In-memory embedding and similarity search
+GitTrace/laya_client.*    HTTP client for the Laya relevance service
 GitTrace/utils/           Tree-sitter grammar loading and parsing
 GitTrace/rsc/grammar.txt   File-extension to grammar manifest
+laya_service.py           Local HTTP relevance reranker
 llama.cpp/                llama.cpp dependency
 CMakeLists.txt            Build configuration
 ```

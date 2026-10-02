@@ -5,9 +5,19 @@
 #include <unordered_map>
 #include <vector>
 #include <cstddef>
+#include <cstdint>
 
 struct TSLanguage;
 struct TSParser;
+
+struct SyntaxSpan
+{
+    uint32_t start_byte;
+    uint32_t end_byte;
+    uint32_t start_row;
+    uint32_t end_row;
+    std::string type;
+};
 
 class TreeSitter
 {
@@ -25,6 +35,9 @@ public:
     // Parse one source buffer with the grammar selected by its file extension.
     // Returns false for unsupported extensions and parser errors.
     bool parse(const std::string& filepath, const char* source, size_t length);
+
+    // Return syntactic ranges for functions, methods, and types in a source file.
+    std::vector<SyntaxSpan> extractSpans(const std::string& filepath, const char* source, size_t length) const;
 
 private:
     struct Grammar
@@ -46,6 +59,7 @@ private:
 
     bool load_manifest();
     bool install_and_load(const GrammarSpec& spec);
+    std::string get_query_pattern_for_extension(const std::string& ext) const;
 };
 
 #endif

@@ -8,7 +8,7 @@
 #include <cctype>
 #include <vector>
 
-GitTrace::GitTrace() : repo(nullptr), repo_path(nullptr), error(0), initialized(false)
+GitTrace::GitTrace() : repo(nullptr), repo_path(nullptr), error(0), initialized(false), activate_chunkdb(true)
 {
 }
 
@@ -30,6 +30,7 @@ bool GitTrace::init(const char* path = nullptr, bool activate_chunkdb = true)
     }
     repo_path = new char[strlen(path) + 1];
     strcpy(repo_path, path);
+    this->activate_chunkdb = activate_chunkdb;
 
     git_libgit2_init();
     error = git_repository_open(&repo, repo_path);
@@ -39,7 +40,7 @@ bool GitTrace::init(const char* path = nullptr, bool activate_chunkdb = true)
         std::cerr << "Error opening repo: " << repo_path << "\n";
         return false;
     }
-    if(!chunkdb.init()) return false;
+    if(activate_chunkdb && !chunkdb.init()) return false;
 
     initialized = true;
 
@@ -173,8 +174,58 @@ void GitTrace::beginGitTrace()
             failed++;
         }
     }
+
     std::cout << "Tree-sitter parsed " << parsed << " unique file versions";
     if(failed) std::cout << "; " << failed << " unsupported or invalid";
     std::cout << "\n";
     if(!prepared) std::cerr << "One or more grammars were unavailable; see messages above\n";
+
+    if (activate_chunkdb) chunkify(tree_sitter);
+}
+
+std::vector<ChunkMatch> GitTrace::searchChunks(const std::string& query, std::size_t k)
+{
+    if (!initialized || !activate_chunkdb) {
+        std::cerr << "Cannot search chunks: embedding database is not active\n";
+        return {};
+    }
+    return chunkdb.search(query, k);
+}
+
+void GitTrace::chunkify(const TreeSitter& tree_sitter)
+{
+    std::cout << "Creating chunks to send through embedder...\n";
+    constexpr size_t MAX_FALLBACK_BYTES = 1500;
+    size_t total_chunks = 0;
+    for (const Blob& blob : blobs) {
+        if (blob.raw_data.empty()) continue;
+        const char* source = reinterpret_cast<const char*>(blob.raw_data.data());
+        const size_t length = blob.raw_data.size();
+        const std::vector<SyntaxSpan> spans = tree_sitter.extractSpans(blob.filepath, source, length);
+
+        if (spans.empty()) {
+            for (size_t offset = 0; offset < length; offset += MAX_FALLBACK_BYTES) {
+                const size_t chunk_length = std::min(MAX_FALLBACK_BYTES, length - offset);
+                uint32_t start_line = 1;
+                for (size_t i = 0; i < offset; ++i) if (source[i] == '\n') ++start_line;
+                uint32_t end_line = start_line;
+                for (size_t i = offset; i < offset + chunk_length; ++i) if (source[i] == '\n') ++end_line;
+                if (chunk_length && source[offset + chunk_length - 1] == '\n' && end_line > start_line) --end_line;
+                const std::string content(source + offset, chunk_length);
+                const auto embedding = chunkdb.embed(content, true, true, blob.sha, blob.filepath,
+                                                     start_line, std::max(start_line, end_line));
+                if (!embedding.empty()) ++total_chunks;
+            }
+            continue;
+        }
+
+        for (const SyntaxSpan& span : spans) {
+            if (span.start_byte >= span.end_byte || span.end_byte > length) continue;
+            const std::string content(source + span.start_byte, span.end_byte - span.start_byte);
+            const auto embedding = chunkdb.embed(content, true, true, blob.sha, blob.filepath,
+                                                 span.start_row, span.end_row);
+            if (!embedding.empty()) ++total_chunks;
+        }
+    }
+    std::cout << "Indexed " << total_chunks << " semantic chunks into ChunkDB.\n";
 }

@@ -17,30 +17,41 @@ ChunkDB::~ChunkDB()
 bool ChunkDB::init()
 {
     llama_backend_init();
-
-    mparams = llama_model_default_params();
     cparams = llama_context_default_params();
     cparams.embeddings = true;
     cparams.n_ctx = 2048;
 
-    model = llama_model_load_from_file(model_path, mparams);
-    if(model == nullptr)
-    {
-        std::cerr << "Error: failed to load model at " << model_path << '\n';
-        return false;
-    }
+    ggml_backend_dev_t cpu_devices[] = {
+        ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU),
+        nullptr
+    };
+    auto load_model = [&](int32_t gpu_layers, bool cpu_only) {
+        mparams = llama_model_default_params();
+        mparams.n_gpu_layers = gpu_layers;
+        if (cpu_only) mparams.devices = cpu_devices;
+        model = llama_model_load_from_file(model_path, mparams);
+        if (model == nullptr) return false;
 
-    vcb = llama_model_get_vocab(model);
-    ctx = llama_init_from_model(model, cparams);
-    if(ctx == nullptr)
-    {
-        std::cerr << "Error: failed to create llama context\n";
+        vcb = llama_model_get_vocab(model);
+        ctx = llama_init_from_model(model, cparams);
+        if (ctx != nullptr) return true;
+
         llama_model_free(model);
         model = nullptr;
+        vcb = nullptr;
         return false;
+    };
+
+    if (load_model(-1, false)) return true;
+
+    std::cerr << "Warning: GPU model initialization failed; retrying with CPU only.\n";
+    if (cpu_devices[0] != nullptr && load_model(0, true)) {
+        std::cerr << "Loaded embedding model with CPU backend.\n";
+        return true;
     }
-    
-    return true;
+
+    std::cerr << "Error: failed to initialize embedding model at " << model_path << '\n';
+    return false;
 }
 
 std::vector<llama_token> ChunkDB::tokenize(const std::string& input, bool add_special)
@@ -73,7 +84,9 @@ std::vector<llama_token> ChunkDB::tokenize(const std::string& input, bool add_sp
     return tokens;
 }
 
-std::vector<float> ChunkDB::embed(const std::string& input, bool add_special, bool store)
+std::vector<float> ChunkDB::embed(const std::string& input, bool add_special, bool store,
+                                  const std::string& commit_sha, const std::string& filepath,
+                                  uint32_t start_line, uint32_t end_line)
 {
     if(ctx == nullptr || model == nullptr || vcb == nullptr)
     {
@@ -113,14 +126,16 @@ std::vector<float> ChunkDB::embed(const std::string& input, bool add_special, bo
     std::vector<float> embedding(values, values + dimension);
     if(store)
     {
-        chunkify(embedding, input);
+        chunkify(embedding, input, commit_sha, filepath, start_line, end_line);
     }
     return embedding;
 }
 
-void ChunkDB::chunkify(const std::vector<float>& embedding, const std::string& input)
+void ChunkDB::chunkify(const std::vector<float>& embedding, const std::string& input,
+                       const std::string& commit_sha, const std::string& filepath,
+                       uint32_t start_line, uint32_t end_line)
 {
-    chunks.emplace_back(curr_seq_id++, embedding, input);
+    chunks.emplace_back(curr_seq_id++, embedding, input, commit_sha, filepath, start_line, end_line);
 }
 
 float ChunkDB::cosineSimilarity(const std::vector<float>& v1, const std::vector<float>& v2)
@@ -172,4 +187,21 @@ std::vector<Chunk*> ChunkDB::getSimilarChunks(const std::vector<float>& embeddin
         results.push_back(scored[i].chunk);
     }
     return results;
+}
+
+std::vector<ChunkMatch> ChunkDB::search(const std::string& query, std::size_t k)
+{
+    const std::vector<float> query_embedding = embed(query, true, false);
+    if (query_embedding.empty() || k == 0) return {};
+
+    std::vector<ChunkMatch> matches;
+    matches.reserve(chunks.size());
+    for (const Chunk& chunk : chunks) {
+        matches.push_back({&chunk, cosineSimilarity(query_embedding, chunk.embedding)});
+    }
+    std::sort(matches.begin(), matches.end(), [](const ChunkMatch& lhs, const ChunkMatch& rhs) {
+        return lhs.similarity > rhs.similarity;
+    });
+    if (matches.size() > k) matches.resize(k);
+    return matches;
 }

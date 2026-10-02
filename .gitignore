@@ -3,3 +3,4 @@ GitTrace/chunkdb/embedder/
 GitTrace/rsc/grammars/
 build/
 .vscode/
+.vgittrace/

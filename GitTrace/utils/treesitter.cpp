@@ -331,3 +331,73 @@ bool TreeSitter::parse(const std::string& filepath, const char* source, size_t l
     ts_tree_delete(tree);
     return valid;
 }
+
+std::string TreeSitter::get_query_pattern_for_extension(const std::string& ext) const
+{
+    if (ext == "cpp" || ext == "cc" || ext == "cxx" || ext == "h" || ext == "hpp") {
+        return "(function_definition) @fn (class_specifier) @cls (struct_specifier) @st";
+    }
+    if (ext == "c") return "(function_definition) @fn (struct_specifier) @st";
+    if (ext == "py") return "(function_definition) @fn (class_definition) @cls";
+    if (ext == "js" || ext == "jsx" || ext == "ts" || ext == "tsx") {
+        return "(function_declaration) @fn (method_definition) @fn (class_declaration) @cls";
+    }
+    if (ext == "rs") return "(function_item) @fn (impl_item) @impl";
+    if (ext == "go") return "(function_declaration) @fn (method_declaration) @fn";
+    return {};
+}
+
+std::vector<SyntaxSpan> TreeSitter::extractSpans(const std::string& filepath, const char* source,
+                                                 size_t length) const
+{
+    std::vector<SyntaxSpan> spans;
+    if (!source || length == 0 || length > std::numeric_limits<uint32_t>::max()) return spans;
+
+    const std::string ext = extension_of(filepath);
+    const auto mapping = extension_to_grammar_.find(ext);
+    if (mapping == extension_to_grammar_.end()) return spans;
+    const auto grammar = grammars_.find(mapping->second.key);
+    if (grammar == grammars_.end() || !grammar->second.parser || !grammar->second.language) return spans;
+
+    TSTree* tree = ts_parser_parse_string(grammar->second.parser, nullptr, source,
+                                          static_cast<uint32_t>(length));
+    if (!tree) return spans;
+
+    const std::string query_text = get_query_pattern_for_extension(ext);
+    if (!query_text.empty()) {
+        uint32_t error_offset = 0;
+        TSQueryError error_type = TSQueryErrorNone;
+        TSQuery* query = ts_query_new(grammar->second.language, query_text.c_str(),
+                                      static_cast<uint32_t>(query_text.size()),
+                                      &error_offset, &error_type);
+        if (query && error_type == TSQueryErrorNone) {
+            TSQueryCursor* cursor = ts_query_cursor_new();
+            if (cursor) {
+                ts_query_cursor_exec(cursor, query, ts_tree_root_node(tree));
+                TSQueryMatch match;
+                while (ts_query_cursor_next_match(cursor, &match)) {
+                    for (uint16_t i = 0; i < match.capture_count; ++i) {
+                        const TSNode node = match.captures[i].node;
+                        const uint32_t start = ts_node_start_byte(node);
+                        const uint32_t end = ts_node_end_byte(node);
+                        if (start >= end || end > length) continue;
+                        const TSPoint first = ts_node_start_point(node);
+                        const TSPoint last = ts_node_end_point(node);
+                        const uint32_t end_line = last.row + (last.column > 0 ? 1 : 0);
+                        spans.push_back({start, end, first.row + 1, std::max(first.row + 1, end_line),
+                                         ts_node_type(node)});
+                    }
+                }
+                ts_query_cursor_delete(cursor);
+            }
+            ts_query_delete(query);
+        }
+    }
+
+    ts_tree_delete(tree);
+    std::sort(spans.begin(), spans.end(), [](const SyntaxSpan& a, const SyntaxSpan& b) {
+        if (a.start_byte != b.start_byte) return a.start_byte < b.start_byte;
+        return a.end_byte > b.end_byte;
+    });
+    return spans;
+}

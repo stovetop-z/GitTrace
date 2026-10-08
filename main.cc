@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <algorithm>
 #include <charconv>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <iomanip>
@@ -11,8 +12,61 @@
 #include <limits>
 #include <string>
 
+#ifdef _WIN32
+#include <io.h>
+#define gittrace_dup _dup
+#define gittrace_dup2 _dup2
+#define gittrace_close _close
+#define gittrace_fileno _fileno
+#else
+#include <unistd.h>
+#define gittrace_dup dup
+#define gittrace_dup2 dup2
+#define gittrace_close close
+#define gittrace_fileno fileno
+#endif
+
 namespace
 {
+int saved_stdout_fd = -1;
+
+bool redirect_startup_output()
+{
+    std::cout.flush();
+    std::cerr.flush();
+    std::fflush(stdout);
+    std::fflush(stderr);
+
+    saved_stdout_fd = gittrace_dup(gittrace_fileno(stdout));
+    if (saved_stdout_fd < 0) return false;
+    if (!std::freopen("dev.log", "a", stdout)) {
+        gittrace_dup2(saved_stdout_fd, gittrace_fileno(stdout));
+        gittrace_close(saved_stdout_fd);
+        saved_stdout_fd = -1;
+        return false;
+    }
+    if (gittrace_dup2(gittrace_fileno(stdout), gittrace_fileno(stderr)) < 0) {
+        gittrace_dup2(saved_stdout_fd, gittrace_fileno(stdout));
+        gittrace_close(saved_stdout_fd);
+        saved_stdout_fd = -1;
+        return false;
+    }
+    return true;
+}
+
+void restore_console_output()
+{
+    std::cout.flush();
+    std::cerr.flush();
+    std::fflush(stdout);
+    std::fflush(stderr);
+    if (saved_stdout_fd >= 0) {
+        gittrace_dup2(saved_stdout_fd, gittrace_fileno(stdout));
+        gittrace_close(saved_stdout_fd);
+        saved_stdout_fd = -1;
+    }
+}
+
 void print_usage(const char* program)
 {
     std::cout << "Usage: " << program << " [options] [repository-path]\n"
@@ -75,8 +129,6 @@ void print_match(const ChunkMatch& match, std::size_t rank,
 void run_query_prompt(GitTrace& trace, std::size_t top_k,
                       bool use_laya, const std::string& laya_url)
 {
-    std::cout << "\nInteractive chunk search (enter :q to quit, :help for help).\n";
-    if (use_laya) std::cout << "Relevance reranker: " << laya_url << '\n';
     LayaClient laya(laya_url);
     std::string query;
     while (true) {
@@ -127,7 +179,6 @@ void run_query_prompt(GitTrace& trace, std::size_t top_k,
             print_match(matches[i], i + 1);
         }
     }
-    std::cout << "Leaving interactive search.\n";
 }
 }
 
@@ -210,6 +261,11 @@ int main(int argc, char* argv[])
     }
 
     const std::filesystem::path normalized_path = std::filesystem::absolute(repository_path);
+    std::cout << "Loading...\n" << std::flush;
+    if (!redirect_startup_output()) {
+        std::cerr << "Could not open dev.log for writing.\n";
+        return 1;
+    }
     std::cout << "Opening repository: " << normalized_path.string() << '\n';
 
     GitTrace trace;
@@ -217,6 +273,8 @@ int main(int argc, char* argv[])
         std::cerr << "Failed to initialize GitTrace. Check the repository path";
         if (embeddings_enabled) std::cerr << " and embedding model configuration";
         std::cerr << ".\n";
+        restore_console_output();
+        std::cout << "Initialization failed; see dev.log.\n";
         return 1;
     }
 
@@ -231,8 +289,11 @@ int main(int argc, char* argv[])
               << " unique text blob version(s).";
     if (!embeddings_enabled) std::cout << " Embeddings were skipped.";
     std::cout << '\n';
+    restore_console_output();
     if (embeddings_enabled && interactive_enabled) {
         run_query_prompt(trace, top_k, use_laya, laya_url);
+    } else {
+        std::cout << "Loading complete. See dev.log for details.\n";
     }
     return 0;
 }

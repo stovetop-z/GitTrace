@@ -2,5 +2,7 @@ llama.cpp/
 GitTrace/chunkdb/embedder/
 GitTrace/rsc/grammars/
 build/
+dev.log
 .vscode/
 .vgittrace/
+.gittraceignore

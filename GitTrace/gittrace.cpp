@@ -6,6 +6,9 @@
 #include <set>
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <vector>
 
 GitTrace::GitTrace() : repo(nullptr), repo_path(nullptr), error(0), initialized(false), activate_chunkdb(true)
@@ -39,6 +42,22 @@ bool GitTrace::init(const char* path = nullptr, bool activate_chunkdb = true)
         const git_error* e = git_error_last();
         std::cerr << "Error opening repo: " << repo_path << "\n";
         return false;
+    }
+    const char* workdir = git_repository_workdir(repo);
+    const std::filesystem::path repository_root = workdir && *workdir
+        ? std::filesystem::path(workdir) : std::filesystem::path(repo_path);
+    const std::filesystem::path ignore_path = repository_root / ".gittraceignore";
+    std::ifstream ignore_file(ignore_path, std::ios::binary);
+    if (ignore_file) {
+        std::string rules((std::istreambuf_iterator<char>(ignore_file)),
+                          std::istreambuf_iterator<char>());
+        if (!rules.empty() && rules.back() != '\n') rules.push_back('\n');
+        if (!rules.empty() && git_ignore_add_rule(repo, rules.c_str()) < 0) {
+            const git_error* e = git_error_last();
+            std::cerr << "Could not load " << ignore_path << ": "
+                      << (e ? e->message : "invalid ignore rule") << '\n';
+            return false;
+        }
     }
     if(activate_chunkdb && !chunkdb.init()) return false;
 
@@ -108,6 +127,12 @@ void GitTrace::beginGitTrace()
                 git_oid_tostr(blob_sha, sizeof(blob_sha), entry_oid);
                 std::string blob_hash(blob_sha);
 
+                const std::string filepath = std::string(root) + git_tree_entry_name(entry);
+                int ignored = 0;
+                if (git_ignore_path_is_ignored(&ignored, wcontext->repo, filepath.c_str()) == 0 && ignored) {
+                    return 0;
+                }
+
                 // Skip this file if we have already processed this exact byte-for-byte state
                 if (wcontext->processed_blobs->find(blob_hash) != wcontext->processed_blobs->end()) 
                 {
@@ -122,7 +147,7 @@ void GitTrace::beginGitTrace()
                     {
                         Blob b;
                         b.sha = wcontext->curr_sha;
-                        b.filepath = std::string(root) + git_tree_entry_name(entry);
+                        b.filepath = filepath;
                         b.time_mod = wcontext->timestamp;
                         b.author_name = wcontext->a_name;
                         b.author_email = wcontext->a_email;
@@ -213,19 +238,23 @@ void GitTrace::chunkify(const TreeSitter& tree_sitter)
                 if (chunk_length && source[offset + chunk_length - 1] == '\n' && end_line > start_line) --end_line;
                 const std::string content(source + offset, chunk_length);
                 const auto embedding = chunkdb.embed(content, true, true, blob.sha, blob.filepath,
-                                                     start_line, std::max(start_line, end_line));
+                                                     start_line, std::max(start_line, end_line),
+                                                     blob.time_mod, "fallback", 0, 0);
                 if (!embedding.empty()) ++total_chunks;
             }
             continue;
         }
 
+        uint32_t ordinal = 0;
         for (const SyntaxSpan& span : spans) {
             if (span.start_byte >= span.end_byte || span.end_byte > length) continue;
             const std::string content(source + span.start_byte, span.end_byte - span.start_byte);
             const auto embedding = chunkdb.embed(content, true, true, blob.sha, blob.filepath,
-                                                 span.start_row, span.end_row);
+                                                 span.start_row, span.end_row, blob.time_mod,
+                                                 span.type, 0, ordinal++);
             if (!embedding.empty()) ++total_chunks;
         }
     }
+    chunkdb.alignHistoricalChunks();
     std::cout << "Indexed " << total_chunks << " semantic chunks into ChunkDB.\n";
 }

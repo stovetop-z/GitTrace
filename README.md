@@ -1,6 +1,6 @@
 # GitTrace
 
-GitTrace is a C++ prototype for analyzing source files across a Git repository's history. It uses libgit2 to walk commits, collects unique text blob versions, and uses Tree-sitter to parse files whose extensions have configured grammars. `ChunkDB` initializes an embedding model, but the current history scan does not yet store parsed code or embeddings in the database.
+GitTrace is a C++ prototype for analyzing source files across a Git repository's history. It uses libgit2 to walk commits, collects unique text blob versions, parses supported files with Tree-sitter, and stores syntax-based chunks and embeddings in an in-memory `ChunkDB`.
 
 ## Requirements
 
@@ -47,11 +47,26 @@ Run from the repository root so the relative model and grammar paths resolve. Wi
 
 After indexing, the CLI accepts natural-language or code queries. It retrieves a wider vector-search candidate set, then posts those candidates to the local reranking service for relevance decisions. It displays only candidates accepted as `direct` or `related`; if the service is unavailable, it warns and displays the unreranked vector results. Use `--no-laya` to bypass reranking or `--laya-url URL` to change the service endpoint. `GITTRACE_LAYA_URL` can also set the endpoint. `--no-interactive` ends after indexing.
 
+At startup the CLI displays `Loading...` while initialization and indexing output is appended to `dev.log` in the current working directory. In interactive mode, successful startup proceeds directly to the `query>` prompt. Initialization and runtime errors are written to the same log.
+
 ## Git history grammar parsing
 
 `GitTrace::beginGitTrace()` reads unique text blob versions from the repository history, collects their filename extensions, and looks up each extension in `GitTrace/rsc/grammar.txt`. For each configured grammar it clones the repository into `GitTrace/rsc/grammars/`, builds the generated parser sources as a shared library, loads the library, and parses the collected blobs. Grammar source checkouts and build products are local and ignored by Git. Subsequent runs reuse the source checkouts and rebuild the parser libraries; to refresh a grammar source checkout, remove its directory under `GitTrace/rsc/grammars/`.
 
 This requires `tree-sitter` to be discoverable by `pkg-config` at configure time. On first use, CMake and a C/C++ toolchain must also be available on `PATH`, and the machine needs network access. Extensions absent from `grammar.txt` are skipped with a diagnostic. The manifest uses `extension = repository URL`, with optional `| source subdirectory | exported function` fields for repositories containing multiple parsers or keeping the parser below the repository root. When omitted, the source is read from the repository root and the exported function is inferred from the repository name (for example, `tree-sitter-cpp` maps to `tree_sitter_cpp`).
+
+## Excluding files
+
+Add a `.gittraceignore` file to the repository root to exclude paths from history collection, parsing, and search indexing. It accepts Git ignore syntax, including comments, glob patterns, directory patterns, and `!` negation rules. For example:
+
+```gittraceignore
+LICENSE
+README*
+docs/
+!docs/architecture.md
+```
+
+Paths ignored by the repository's regular Git ignore files are also excluded.
 
 ## Laya relevance service
 
@@ -118,4 +133,6 @@ llama.cpp/                llama.cpp dependency
 CMakeLists.txt            Build configuration
 ```
 
-The project is under active development. GitTrace currently reports parsing results but does not yet extract syntax nodes, create embeddings for historical files, or persist an index between runs.
+The project is under active development. The in-memory index is rebuilt for each run and is not persisted between runs.
+
+Historical chunks are aligned heuristically within the same file. GitTrace compares chunks from older versions using embedding similarity, syntax-node type, and their relative order in the file. A matched chunk inherits a lineage depth; search similarity is then reduced by `exp(-0.12 × depth)` so newer versions rank ahead when otherwise equally relevant. This is a per-file snapshot heuristic: it does not currently use Git parent/merge relationships, and unmatched or low-confidence chunks start new lineages.

@@ -24,7 +24,10 @@ private:
 
     void chunkify(const std::vector<float>& embedding, const std::string& input,
                   const std::string& commit_sha, const std::string& filepath,
-                  uint32_t start_line, uint32_t end_line);
+                  uint32_t start_line, uint32_t end_line, int64_t commit_time,
+                  const std::string& syntax_type, uint32_t lineage_depth,
+                  uint32_t syntax_ordinal);
+    void inferLineages();
     std::vector<llama_token> tokenize(const std::string& input, bool add_special);
     float cosineSimilarity(const std::vector<float>& v1, const std::vector<float>& v2);
 
@@ -35,7 +38,10 @@ public:
     bool init();
     std::vector<float> embed(const std::string& input, bool add_special = true, bool store = true,
                              const std::string& commit_sha = {}, const std::string& filepath = {},
-                             uint32_t start_line = 0, uint32_t end_line = 0);
+                             uint32_t start_line = 0, uint32_t end_line = 0,
+                             int64_t commit_time = 0, const std::string& syntax_type = {},
+                             uint32_t lineage_depth = 0, uint32_t syntax_ordinal = 0);
+    void alignHistoricalChunks();
 
     std::vector<Chunk*> getSimilarChunks(const std::vector<float>& embedding, uint8_t k = 3);
     std::vector<ChunkMatch> search(const std::string& query, std::size_t k = 5);

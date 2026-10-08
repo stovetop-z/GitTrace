@@ -86,7 +86,9 @@ std::vector<llama_token> ChunkDB::tokenize(const std::string& input, bool add_sp
 
 std::vector<float> ChunkDB::embed(const std::string& input, bool add_special, bool store,
                                   const std::string& commit_sha, const std::string& filepath,
-                                  uint32_t start_line, uint32_t end_line)
+                                  uint32_t start_line, uint32_t end_line, int64_t commit_time,
+                                  const std::string& syntax_type, uint32_t lineage_depth,
+                                  uint32_t syntax_ordinal)
 {
     if(ctx == nullptr || model == nullptr || vcb == nullptr)
     {
@@ -126,17 +128,53 @@ std::vector<float> ChunkDB::embed(const std::string& input, bool add_special, bo
     std::vector<float> embedding(values, values + dimension);
     if(store)
     {
-        chunkify(embedding, input, commit_sha, filepath, start_line, end_line);
+        chunkify(embedding, input, commit_sha, filepath, start_line, end_line,
+                 commit_time, syntax_type, lineage_depth, syntax_ordinal);
     }
     return embedding;
 }
 
 void ChunkDB::chunkify(const std::vector<float>& embedding, const std::string& input,
                        const std::string& commit_sha, const std::string& filepath,
-                       uint32_t start_line, uint32_t end_line)
+                       uint32_t start_line, uint32_t end_line, int64_t commit_time,
+                       const std::string& syntax_type, uint32_t lineage_depth,
+                       uint32_t syntax_ordinal)
 {
-    chunks.emplace_back(curr_seq_id++, embedding, input, commit_sha, filepath, start_line, end_line);
+    chunks.emplace_back(curr_seq_id++, embedding, input, commit_sha, filepath, start_line, end_line,
+                        commit_time, syntax_type, lineage_depth, syntax_ordinal);
 }
+
+void ChunkDB::inferLineages()
+{
+    std::vector<std::size_t> chronological(chunks.size());
+    for (std::size_t i = 0; i < chronological.size(); ++i) chronological[i] = i;
+    std::stable_sort(chronological.begin(), chronological.end(), [&](std::size_t a, std::size_t b) {
+        if (chunks[a].filepath != chunks[b].filepath) return chunks[a].filepath < chunks[b].filepath;
+        return chunks[a].commit_time < chunks[b].commit_time;
+    });
+
+    for (std::size_t position = 0; position < chronological.size(); ++position) {
+        Chunk& current = chunks[chronological[position]];
+        float best_score = 0.78f;
+        const Chunk* best_parent = nullptr;
+        for (std::size_t prior = position; prior > 0; --prior) {
+            const Chunk& candidate = chunks[chronological[prior - 1]];
+            if (candidate.filepath != current.filepath) break;
+            if (candidate.commit_time >= current.commit_time ||
+                candidate.syntax_type != current.syntax_type) continue;
+            const float semantic = cosineSimilarity(current.embedding, candidate.embedding);
+            const uint32_t delta = current.syntax_ordinal > candidate.syntax_ordinal
+                ? current.syntax_ordinal - candidate.syntax_ordinal
+                : candidate.syntax_ordinal - current.syntax_ordinal;
+            const float topology = 1.0f / (1.0f + 0.15f * static_cast<float>(delta));
+            const float score = 0.85f * semantic + 0.15f * topology;
+            if (score > best_score) { best_score = score; best_parent = &candidate; }
+        }
+        current.lineage_depth = best_parent ? best_parent->lineage_depth + 1 : 0;
+    }
+}
+
+void ChunkDB::alignHistoricalChunks() { inferLineages(); }
 
 float ChunkDB::cosineSimilarity(const std::vector<float>& v1, const std::vector<float>& v2)
 {
@@ -197,7 +235,8 @@ std::vector<ChunkMatch> ChunkDB::search(const std::string& query, std::size_t k)
     std::vector<ChunkMatch> matches;
     matches.reserve(chunks.size());
     for (const Chunk& chunk : chunks) {
-        matches.push_back({&chunk, cosineSimilarity(query_embedding, chunk.embedding)});
+        const float decay = std::exp(-0.12f * static_cast<float>(chunk.lineage_depth));
+        matches.push_back({&chunk, cosineSimilarity(query_embedding, chunk.embedding) * decay});
     }
     std::sort(matches.begin(), matches.end(), [](const ChunkMatch& lhs, const ChunkMatch& rhs) {
         return lhs.similarity > rhs.similarity;

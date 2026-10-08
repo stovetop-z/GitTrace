@@ -65,18 +65,26 @@ class GitTraceCliTests(unittest.TestCase):
     def test_scans_explicit_custom_repository(self):
         with tempfile.TemporaryDirectory(prefix="gittrace-cli-test-") as temp_dir:
             repository = self.make_repository(Path(temp_dir))
+            log_path = self.project_root / "dev.log"
+            log_offset = log_path.stat().st_size if log_path.exists() else 0
             result = self.run_cli(
                 "--repo", repository,
                 "--no-embeddings",
                 "--no-interactive",
                 "--list",
             )
+            with log_path.open("r", encoding="utf-8", errors="replace") as log_file:
+                log_file.seek(log_offset)
+                initialization_log = log_file.read()
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("Opening repository:", result.stdout)
-        self.assertIn("probe.txt", result.stdout)
-        self.assertIn("Collected 1 unique text blob version(s)", result.stdout)
-        self.assertIn("Embeddings were skipped", result.stdout)
+        self.assertIn("Loading...", result.stdout)
+        self.assertIn("Loading complete. See dev.log", result.stdout)
+        self.assertNotIn("Opening repository:", result.stdout)
+        self.assertIn("Opening repository:", initialization_log)
+        self.assertIn("probe.txt", initialization_log)
+        self.assertIn("Collected 1 unique text blob version(s)", initialization_log)
+        self.assertIn("Embeddings were skipped", initialization_log)
 
 
 if __name__ == "__main__":

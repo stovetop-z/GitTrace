@@ -1,9 +1,12 @@
 #include "chunkdb.h"
+#include "retrieval.h"
 
 #include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <limits>
+#include <numeric>
+#include <tuple>
 
 ChunkDB::ChunkDB() : curr_seq_id(0) {}
 
@@ -16,6 +19,7 @@ ChunkDB::~ChunkDB()
 
 bool ChunkDB::init()
 {
+    if (ctx != nullptr && model != nullptr && vcb != nullptr) return true;
     llama_backend_init();
     cparams = llama_context_default_params();
     cparams.embeddings = true;
@@ -42,10 +46,14 @@ bool ChunkDB::init()
         return false;
     };
 
-    if (load_model(-1, false)) return true;
+    if (load_model(-1, false)) {
+        backend_name = "automatic device selection";
+        return true;
+    }
 
     std::cerr << "Warning: GPU model initialization failed; retrying with CPU only.\n";
     if (cpu_devices[0] != nullptr && load_model(0, true)) {
+        backend_name = "CPU fallback";
         std::cerr << "Loaded embedding model with CPU backend.\n";
         return true;
     }
@@ -88,8 +96,10 @@ std::vector<float> ChunkDB::embed(const std::string& input, bool add_special, bo
                                   const std::string& commit_sha, const std::string& filepath,
                                   uint32_t start_line, uint32_t end_line, int64_t commit_time,
                                   const std::string& syntax_type, uint32_t lineage_depth,
-                                  uint32_t syntax_ordinal)
+                                  uint32_t syntax_ordinal,
+                                  const std::vector<GitOccurrence>& occurrences)
 {
+    if ((ctx == nullptr || model == nullptr || vcb == nullptr) && !init()) return {};
     if(ctx == nullptr || model == nullptr || vcb == nullptr)
     {
         std::cerr << "Error: ChunkDB is not initialized\n";
@@ -129,7 +139,7 @@ std::vector<float> ChunkDB::embed(const std::string& input, bool add_special, bo
     if(store)
     {
         chunkify(embedding, input, commit_sha, filepath, start_line, end_line,
-                 commit_time, syntax_type, lineage_depth, syntax_ordinal);
+                 commit_time, syntax_type, lineage_depth, syntax_ordinal, occurrences);
     }
     return embedding;
 }
@@ -138,10 +148,11 @@ void ChunkDB::chunkify(const std::vector<float>& embedding, const std::string& i
                        const std::string& commit_sha, const std::string& filepath,
                        uint32_t start_line, uint32_t end_line, int64_t commit_time,
                        const std::string& syntax_type, uint32_t lineage_depth,
-                       uint32_t syntax_ordinal)
+                       uint32_t syntax_ordinal,
+                       const std::vector<GitOccurrence>& occurrences)
 {
     chunks.emplace_back(curr_seq_id++, embedding, input, commit_sha, filepath, start_line, end_line,
-                        commit_time, syntax_type, lineage_depth, syntax_ordinal);
+                        commit_time, syntax_type, lineage_depth, syntax_ordinal, occurrences);
 }
 
 void ChunkDB::inferLineages()
@@ -174,7 +185,53 @@ void ChunkDB::inferLineages()
     }
 }
 
-void ChunkDB::alignHistoricalChunks() { inferLineages(); }
+void ChunkDB::alignHistoricalChunks()
+{
+    for (Chunk& chunk : chunks) {
+        std::stable_sort(chunk.occurrences.begin(), chunk.occurrences.end(),
+            [](const GitOccurrence& lhs, const GitOccurrence& rhs) {
+                if (lhs.commit_time != rhs.commit_time) return lhs.commit_time > rhs.commit_time;
+                if (lhs.commit_sha != rhs.commit_sha) return lhs.commit_sha < rhs.commit_sha;
+                return lhs.tree_sha < rhs.tree_sha;
+            });
+        if (!chunk.occurrences.empty()) {
+            chunk.commit_sha = chunk.occurrences.front().commit_sha;
+            chunk.commit_time = chunk.occurrences.front().commit_time;
+        }
+    }
+    inferLineages();
+    std::stable_sort(chunks.begin(), chunks.end(), [](const Chunk& lhs, const Chunk& rhs) {
+        return std::tie(lhs.filepath, lhs.commit_sha, lhs.start_line, lhs.end_line,
+                        lhs.syntax_type, lhs.syntax_ordinal, lhs.input) <
+               std::tie(rhs.filepath, rhs.commit_sha, rhs.start_line, rhs.end_line,
+                        rhs.syntax_type, rhs.syntax_ordinal, rhs.input);
+    });
+    for (std::size_t i = 0; i < chunks.size(); ++i) chunks[i].id = static_cast<uint32_t>(i);
+    curr_seq_id = static_cast<uint32_t>(std::min<std::size_t>(chunks.size(),
+        std::numeric_limits<uint32_t>::max()));
+}
+
+void ChunkDB::replaceChunks(std::vector<Chunk> loaded_chunks)
+{
+    chunks = std::move(loaded_chunks);
+    curr_seq_id = 0;
+    for (const Chunk& chunk : chunks) {
+        if (chunk.id >= curr_seq_id && chunk.id != std::numeric_limits<uint32_t>::max())
+            curr_seq_id = chunk.id + 1;
+    }
+}
+
+void ChunkDB::pruneChunksWithoutOccurrences()
+{
+    chunks.erase(std::remove_if(chunks.begin(), chunks.end(), [](const Chunk& chunk) {
+        return chunk.occurrences.empty();
+    }), chunks.end());
+    curr_seq_id = 0;
+    for (const Chunk& chunk : chunks) {
+        if (chunk.id >= curr_seq_id && chunk.id != std::numeric_limits<uint32_t>::max())
+            curr_seq_id = chunk.id + 1;
+    }
+}
 
 float ChunkDB::cosineSimilarity(const std::vector<float>& v1, const std::vector<float>& v2)
 {
@@ -227,19 +284,96 @@ std::vector<Chunk*> ChunkDB::getSimilarChunks(const std::vector<float>& embeddin
     return results;
 }
 
-std::vector<ChunkMatch> ChunkDB::search(const std::string& query, std::size_t k)
+std::vector<ChunkMatch> ChunkDB::search(const std::string& query, std::size_t k,
+                                        bool use_retrieval_instruction,
+                                        RetrievalMode mode,
+                                        bool expand_query_terms)
 {
-    const std::vector<float> query_embedding = embed(query, true, false);
-    if (query_embedding.empty() || k == 0) return {};
+    static constexpr char retrieval_instruction[] =
+        "Given a question about a software repository, retrieve code snippets that are appropriate responses to the question.";
+    std::vector<float> query_embedding;
+    if (mode != RetrievalMode::Keyword) {
+        const std::string embedding_input = use_retrieval_instruction
+            ? "<instruct>" + std::string(retrieval_instruction) + "\n<query>" + query
+            : query;
+        query_embedding = embed(embedding_input, true, false);
+        if (query_embedding.empty()) return {};
+    }
+    if (k == 0) return {};
 
     std::vector<ChunkMatch> matches;
     matches.reserve(chunks.size());
     for (const Chunk& chunk : chunks) {
-        const float decay = std::exp(-0.12f * static_cast<float>(chunk.lineage_depth));
-        matches.push_back({&chunk, cosineSimilarity(query_embedding, chunk.embedding) * decay});
+        const float decay = mode == RetrievalMode::Keyword
+            ? 1.0f : std::exp(-0.12f * static_cast<float>(chunk.lineage_depth));
+        const float raw_cosine_similarity = mode == RetrievalMode::Keyword
+            ? 0.0f : cosineSimilarity(query_embedding, chunk.embedding);
+        const float adjusted_similarity = raw_cosine_similarity * decay;
+        matches.push_back({&chunk, raw_cosine_similarity, adjusted_similarity, 0.0f});
     }
-    std::sort(matches.begin(), matches.end(), [](const ChunkMatch& lhs, const ChunkMatch& rhs) {
-        return lhs.similarity > rhs.similarity;
+
+    // Build a small in-memory BM25 ranking over chunk text and paths, then fuse
+    // it with vector ranks. Reciprocal rank fusion avoids comparing raw cosine
+    // scores directly with BM25 scores.
+    const std::size_t count = matches.size();
+    std::vector<std::size_t> vector_rank(count, 0);
+    if (mode != RetrievalMode::Keyword) {
+        std::vector<std::size_t> vector_order(count);
+        std::iota(vector_order.begin(), vector_order.end(), 0);
+        std::stable_sort(vector_order.begin(), vector_order.end(), [&](std::size_t lhs, std::size_t rhs) {
+            return matches[lhs].similarity > matches[rhs].similarity;
+        });
+        for (std::size_t i = 0; i < count; ++i) vector_rank[vector_order[i]] = i + 1;
+    }
+
+    std::vector<std::string> documents;
+    documents.reserve(count);
+    for (std::size_t i = 0; i < count; ++i) {
+        documents.push_back(chunks[i].input + " " + chunks[i].filepath);
+    }
+    const std::vector<double> lexical_score =
+        gittrace::retrieval::bm25Scores(query, documents, expand_query_terms);
+
+    std::vector<std::size_t> lexical_rank(count, 0);
+    for (std::size_t i = 0; i < count; ++i) {
+        if (lexical_score[i] > 0.0) lexical_rank[i] = i + 1;
+    }
+    std::vector<std::size_t> lexical_order;
+    lexical_order.reserve(count);
+    for (std::size_t i = 0; i < count; ++i) {
+        if (lexical_score[i] > 0.0) lexical_order.push_back(i);
+    }
+    std::stable_sort(lexical_order.begin(), lexical_order.end(), [&](std::size_t lhs, std::size_t rhs) {
+        return lexical_score[lhs] > lexical_score[rhs];
+    });
+    std::fill(lexical_rank.begin(), lexical_rank.end(), 0);
+    for (std::size_t i = 0; i < lexical_order.size(); ++i) lexical_rank[lexical_order[i]] = i + 1;
+
+    if (mode == RetrievalMode::Keyword) {
+        for (std::size_t i = 0; i < count; ++i) {
+            matches[i].retrieval_score = static_cast<float>(lexical_score[i]);
+        }
+    } else if (mode == RetrievalMode::Vector) {
+        for (ChunkMatch& match : matches) match.retrieval_score = match.similarity;
+    } else {
+        constexpr double rrf_constant = 60.0;
+        for (std::size_t i = 0; i < count; ++i) {
+            double fused = 1.0 / (rrf_constant + static_cast<double>(vector_rank[i]));
+            if (lexical_rank[i] != 0) {
+                fused += 1.0 / (rrf_constant + static_cast<double>(lexical_rank[i]));
+            }
+            matches[i].retrieval_score = static_cast<float>(fused);
+        }
+    }
+
+    if (mode == RetrievalMode::Keyword) {
+        matches.erase(std::remove_if(matches.begin(), matches.end(), [](const ChunkMatch& match) {
+            return match.retrieval_score <= 0.0f;
+        }), matches.end());
+    }
+
+    std::stable_sort(matches.begin(), matches.end(), [](const ChunkMatch& lhs, const ChunkMatch& rhs) {
+        return lhs.retrieval_score > rhs.retrieval_score;
     });
     if (matches.size() > k) matches.resize(k);
     return matches;

@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import json
 from pathlib import Path
 
 CLI_EXECUTABLE = None
@@ -56,11 +57,28 @@ class GitTraceCliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("--repo PATH", result.stdout)
         self.assertIn("--top-k N", result.stdout)
+        self.assertIn("--retrieval-mode M", result.stdout)
+        self.assertIn("--query-expansion", result.stdout)
+        self.assertIn("--query TEXT", result.stdout)
+        self.assertIn("--profile PATH", result.stdout)
+        self.assertIn("--rebuild-index", result.stdout)
+        self.assertIn("--index-status", result.stdout)
+        self.assertIn("--index PATH", result.stdout)
 
     def test_rejects_invalid_top_k_before_scanning(self):
         result = self.run_cli("--top-k", "0")
         self.assertEqual(result.returncode, 2)
         self.assertIn("--top-k requires a positive integer", result.stderr)
+
+    def test_rejects_invalid_retrieval_mode_before_scanning(self):
+        result = self.run_cli("--retrieval-mode", "unknown")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--retrieval-mode must be vector, keyword, or hybrid", result.stderr)
+
+    def test_rejects_query_when_embeddings_are_disabled(self):
+        result = self.run_cli("--no-embeddings", "--query", "find an implementation")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--query requires embeddings to be enabled", result.stderr)
 
     def test_scans_explicit_custom_repository(self):
         with tempfile.TemporaryDirectory(prefix="gittrace-cli-test-") as temp_dir:
@@ -83,8 +101,37 @@ class GitTraceCliTests(unittest.TestCase):
         self.assertNotIn("Opening repository:", result.stdout)
         self.assertIn("Opening repository:", initialization_log)
         self.assertIn("probe.txt", initialization_log)
-        self.assertIn("Collected 1 unique text blob version(s)", initialization_log)
+        self.assertIn("Indexed 1 unique text file state(s)", initialization_log)
         self.assertIn("Embeddings were skipped", initialization_log)
+
+    def test_writes_machine_readable_profile(self):
+        with tempfile.TemporaryDirectory(prefix="gittrace-profile-test-") as temp_dir:
+            root = Path(temp_dir)
+            repository = self.make_repository(root)
+            profile = root / "profile.json"
+            result = self.run_cli(
+                "--repo", repository,
+                "--no-embeddings",
+                "--no-interactive",
+                "--profile", profile,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(profile.read_text(encoding="utf-8"))
+
+        self.assertEqual(report["unique_file_versions"], 1)
+        self.assertEqual(report["commits_visited"], 1)
+        for field in ("init_ms", "history_walk_ms", "grammar_prepare_ms", "parsing_ms"):
+            self.assertGreaterEqual(report[field], 0)
+        self.assertEqual(report["query_total_ms"], [])
+
+    def test_index_status_does_not_build_or_load_the_model(self):
+        with tempfile.TemporaryDirectory(prefix="gittrace-index-status-test-") as temp_dir:
+            repository = self.make_repository(Path(temp_dir))
+            index_path = Path(temp_dir) / "custom-index.sqlite"
+            result = self.run_cli("--repo", repository, "--index-status", "--index", index_path)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("No local index", result.stdout)
+        self.assertIn(str(index_path), result.stdout)
 
 
 if __name__ == "__main__":

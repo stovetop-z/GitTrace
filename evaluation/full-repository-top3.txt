@@ -1,0 +1,163 @@
+Loading...
+query> 
+1. GitTrace/gittrace.h:10-10  similarity=0.5156  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+class TreeSitter
+
+2. GitTrace/chunkdb/chunkdb.cpp:177-177  similarity=0.5090  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+void ChunkDB::alignHistoricalChunks() { inferLineages(); }
+
+3. .gitignore:1-4  similarity=0.4669  commit=f2d7368b61b94adf3f9b7d7fd07896133cb71459
+llama.cpp/
+GitTrace/chunkdb/embedder/
+build/
+.vscode/
+query> 
+1. GitTrace/gittrace.h:10-10  similarity=0.4637  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+class TreeSitter
+
+2. .gitignore:1-4  similarity=0.4541  commit=f2d7368b61b94adf3f9b7d7fd07896133cb71459
+llama.cpp/
+GitTrace/chunkdb/embedder/
+build/
+.vscode/
+
+3. .gitignore:1-5  similarity=0.3948  commit=e2db25d8eb0fc8f3ea9263a531b2e72184eb11ae
+llama.cpp/
+GitTrace/chunkdb/embedder/
+GitTrace/rsc/grammars/
+build/
+.vscode/
+query> 
+1. GitTrace/gittrace.h:10-10  similarity=0.4171  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+class TreeSitter
+
+2. .gitignore:1-4  similarity=0.3669  commit=f2d7368b61b94adf3f9b7d7fd07896133cb71459
+llama.cpp/
+GitTrace/chunkdb/embedder/
+build/
+.vscode/
+
+3. GitTrace/utils/treesitter.h:10-10  similarity=0.3644  commit=e2db25d8eb0fc8f3ea9263a531b2e72184eb11ae
+struct TSParser
+query> 
+1. GitTrace/gittrace.h:10-10  similarity=0.3997  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+class TreeSitter
+
+2. main.cc:75-131  similarity=0.3855  commit=7c1352366b18c9a85aa07e624cffa11e43b1cd1b
+void run_query_prompt(GitTrace& trace, std::size_t top_k,
+                      bool use_laya, const std::string& laya_url)
+{
+    std::cout << "\nInteractive chunk search (enter :q to quit, :help for help).\n";
+    if (use_laya) std::cout << "Laya reranker: " << laya_url << '\n';
+    LayaClient laya(laya_url);
+    std::string query;
+    while (true) {
+        std::cout << "query> " << std::flush;
+        if (!std::getline(std::cin, query)) break;
+        if (query == ":q" || query == ":quit" || query == "exit") break;
+        if (query == ":help") {
+            std::cout << "Type a natural-language or code query. Use :q to quit.\n";
+            continue;
+        }
+        if (query.empty()) continue;
+
+        const std::size_t candidate_k = use_laya
+            ? (top_k >= 16 ? 32 : top_k * 2)
+            : top_k;
+        const std::vector<ChunkMatch> matches = trace.searchChunks(query, candidate_k);
+        if (matches.empty()) {
+            std::cout << "No matching chunks found.\n";
+            continue;
+        }
+
+        if (use_laya) {
+            std::vector<LayaMatch> reranked;
+            std::string error;
+            std::cout << "Laya assessing " << matches.size() << " candidates...\n";
+            if (laya.rerank(query, matches, reranked, error)) {
+                std::size_t accepted = 0;
+                for (const LayaMatch& match : reranked) if (match.accepted) ++accepted;
+                std::cout << "Laya accepted " << accepted << '/' << reranked.size()
+                          << " candidates as relevant.\n";
+                if (accepted == 0) {
+                    std::cout << "No chunks passed Laya's relevance filter.\n";
+                    continue;
+                }
+                std::size_t rank = 0;
+                for (const LayaMatch& match : reranked) {
+                    if (!match.accepted) continue;
+                    print_match(match.match, ++rank, &match);
+                    if (rank == top_k) break;
+                }
+                continue;
+            }
+            std::cerr << "Warning: could not reach Laya at " << laya_url
+                      << " (" << error << "). Showing vector results without reranking.\n";
+        }
+
+        for (std::size_t i = 0; i < std::min(top_k, matches.size()); ++i) {
+            print_match(matches[i], i + 1);
+        }
+    }
+    std::cout << "Leaving interactive search.\n";
+}
+
+3. main.cc:75-131  similarity=0.3615  commit=0674f66369180839f1a13e6878b2d9dfdd8f9cdc
+void run_query_prompt(GitTrace& trace, std::size_t top_k,
+                      bool use_laya, const std::string& laya_url)
+{
+    std::cout << "\nInteractive chunk search (enter :q to quit, :help for help).\n";
+    if (use_laya) std::cout << "Relevance reranker: " << laya_url << '\n';
+    LayaClient laya(laya_url);
+    std::string query;
+    while (true) {
+        std::cout << "query> " << std::flush;
+        if (!std::getline(std::cin, query)) break;
+        if (query == ":q" || query == ":quit" || query == "exit") break;
+        if (query == ":help") {
+            std::cout << "Type a natural-language or code query. Use :q to quit.\n";
+            continue;
+        }
+        if (query.empty()) continue;
+
+        const std::size_t candidate_k = use_laya
+            ? (top_k >= 16 ? 32 : top_k * 2)
+            : top_k;
+        const std::vector<ChunkMatch> matches = trace.searchChunks(query, candidate_k);
+        if (matches.empty()) {
+            std::cout << "No matching chunks found.\n";
+            continue;
+        }
+
+        if (use_laya) {
+            std::vector<LayaMatch> reranked;
+            std::string error;
+            std::cout << "Reranker assessing " << matches.size() << " candidates...\n";
+            if (laya.rerank(query, matches, reranked, error)) {
+                std::size_t accepted = 0;
+                for (const LayaMatch& match : reranked) if (match.accepted) ++accepted;
+                std::cout << "Reranker accepted " << accepted << '/' << reranked.size()
+                          << " candidates as relevant.\n";
+                if (accepted == 0) {
+                    std::cout << "No chunks passed the relevance filter.\n";
+                    continue;
+                }
+                std::size_t rank = 0;
+                for (const LayaMatch& match : reranked) {
+                    if (!match.accepted) continue;
+                    print_match(match.match, ++rank, &match);
+                    if (rank == top_k) break;
+                }
+                continue;
+            }
+            std::cerr << "Warning: could not reach the reranker at " << laya_url
+                      << " (" << error << "). Showing vector results without reranking.\n";
+        }
+
+        for (std::size_t i = 0; i < std::min(top_k, matches.size()); ++i) {
+            print_match(matches[i], i + 1);
+        }
+    }
+    std::cout << "Leaving interactive search.\n";
+}
+query> 

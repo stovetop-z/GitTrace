@@ -1,0 +1,195 @@
+Scenario D — Unavailable reranker
+
+Intent: The user wants to know what the CLI shows when the relevance reranker cannot be reached.
+
+Standard Git search
+
+Command:
+git grep -n -I -i -E 'timeout|fallback|rerank' HEAD
+
+Git grep output:
+HEAD:GitTrace/gittrace.cpp:223:    constexpr size_t MAX_FALLBACK_BYTES = 1500;
+HEAD:GitTrace/gittrace.cpp:232:            for (size_t offset = 0; offset < length; offset += MAX_FALLBACK_BYTES) {
+HEAD:GitTrace/gittrace.cpp:233:                const size_t chunk_length = std::min(MAX_FALLBACK_BYTES, length - offset);
+HEAD:GitTrace/gittrace.cpp:242:                                                     blob.time_mod, "fallback", 0, 0);
+HEAD:GitTrace/laya_client.cpp:38:bool LayaClient::rerank(const std::string& query,
+HEAD:GitTrace/laya_client.cpp:92:    curl_easy_setopt(curl.get(), CURLOPT_CONNECTTIMEOUT_MS, 1500L);
+HEAD:GitTrace/laya_client.cpp:93:    curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT_MS, 60000L);
+HEAD:GitTrace/laya_client.cpp:105:        error = "Reranker service returned HTTP " + std::to_string(status);
+HEAD:GitTrace/laya_client.h:25:    bool rerank(const std::string& query,
+HEAD:README.md:48:After indexing, the CLI accepts natural-language or code queries. It retrieves a wider vector-search candidate set, then posts those candidates to the local reranking service for relevance decisions. It displays only candidates accepted as `direct` or `related`; if the service is unavailable, it warns and displays the unreranked vector results. Use `--no-laya` to bypass reranking or `--laya-url URL` to change the service endpoint. `GITTRACE_LAYA_URL` can also set the endpoint. `--no-interactive` ends after indexing.
+HEAD:README.md:73:`laya_service.py` is a local HTTP sidecar for the C++ CLI. Start it before running an embedding-enabled GitTrace scan. GitTrace sends its vector-search candidates to `POST /rerank`; the selected backend returns a `direct`, `related`, or `irrelevant` decision, confidence, original similarity, and an `accepted` flag. It listens on `127.0.0.1:8787` by default. Laya is the default backend and loads its English checkpoint once when it starts. Laya judges relevance; neither backend proves that a chunk is factually correct.
+HEAD:README.md:92:export GITTRACE_RERANKER=gemini
+HEAD:README.md:97:Set `GITTRACE_RERANKER=laya` (the default) to use Laya instead. The C++ client and `/rerank` response format are the same for both backends. The Gemini backend groups candidates in small batches and requests structured JSON classifications.
+HEAD:README.md:102:curl -s http://127.0.0.1:8787/rerank \
+HEAD:README.md:121:The response keeps each caller-provided `id`, so GitTrace can join the decisions back to its chunks. `min_relevance` accepts `direct`, `related` (the default), or `any`; every result is returned in relevance order with an `accepted` flag. Requests accept up to 64 candidates. The request's `max_len` defaults to 256 tokens to keep reranking responsive; the English checkpoint supports up to 512. Set `GITTRACE_LAYA_HOST` and `GITTRACE_LAYA_PORT` to change the bind address and port. Set `GITTRACE_LAYA_MODEL` or `GITTRACE_LAYA_SUBFOLDER` to select a different checkpoint.
+HEAD:README.md:131:laya_service.py           Local Laya or Gemini relevance reranker
+HEAD:laya_service.py:1:"""Local relevance reranking service for GitTrace search candidates."""
+HEAD:laya_service.py:57:class RerankRequest(BaseModel):
+HEAD:laya_service.py:68:    backend = os.environ.get("GITTRACE_RERANKER", "laya").strip().lower()
+HEAD:laya_service.py:88:            logger.info("Configured Gemini reranker model %s", app.state.model_id)
+HEAD:laya_service.py:90:            raise RuntimeError("GITTRACE_RERANKER must be 'laya' or 'gemini'")
+HEAD:laya_service.py:92:        logger.exception("Could not initialize %s reranker", backend)
+HEAD:laya_service.py:93:        raise RuntimeError(f"Could not initialize {backend} reranker: {exc}") from exc
+HEAD:laya_service.py:98:    title="GitTrace Relevance Reranker",
+HEAD:laya_service.py:115:def _gemini_predictions(body: RerankRequest, client: object, model_id: str) -> list[dict[str, object]]:
+HEAD:laya_service.py:177:@app.post("/rerank")
+HEAD:laya_service.py:178:def rerank(body: RerankRequest, request: Request) -> dict[str, object]:
+HEAD:laya_service.py:201:        logger.info("Reranked %d candidates with %s in %.2fs", len(body.candidates), request.app.state.backend, time.perf_counter() - started)
+HEAD:laya_service.py:205:        logger.exception("%s reranking failed", request.app.state.backend)
+HEAD:laya_service.py:206:        raise HTTPException(status_code=502, detail="Reranking failed") from exc
+HEAD:main.cc:78:              << "      --laya-url URL   Laya reranker URL (default: http://127.0.0.1:8787/rerank)\n"
+HEAD:main.cc:79:              << "      --no-laya        Show vector results without Laya reranking\n"
+HEAD:main.cc:154:            std::vector<LayaMatch> reranked;
+HEAD:main.cc:156:            std::cout << "Reranker assessing " << matches.size() << " candidates...\n";
+HEAD:main.cc:157:            if (laya.rerank(query, matches, reranked, error)) {
+HEAD:main.cc:159:                for (const LayaMatch& match : reranked) if (match.accepted) ++accepted;
+HEAD:main.cc:160:                std::cout << "Reranker accepted " << accepted << '/' << reranked.size()
+HEAD:main.cc:167:                for (const LayaMatch& match : reranked) {
+HEAD:main.cc:174:            std::cerr << "Warning: could not reach the reranker at " << laya_url
+HEAD:main.cc:175:                      << " (" << error << "). Showing vector results without reranking.\n";
+HEAD:main.cc:196:        ? configured_laya_url : "http://127.0.0.1:8787/rerank";
+HEAD:training/laya_relevance.jsonl:4:{"query":"How does the CLI contact the reranker?","path":"GitTrace/laya_client.cpp","text":"curl_easy_setopt(curl, CURLOPT_URL, endpoint.c_str()); curl_easy_setopt(curl, CURLOPT_POSTFIELDS, request_body.c_str());","label":"direct"}
+HEAD:training/laya_relevance.jsonl:5:{"query":"How does the CLI contact the reranker?","path":"main.cc","text":"LayaClient laya(laya_url); if (!laya.rerank(query, matches, reranked, error)) ...","label":"related"}
+HEAD:training/laya_relevance.jsonl:6:{"query":"How does the CLI contact the reranker?","path":"GitTrace/chunkdb/chunkdb.cpp","text":"float ChunkDB::similarity(const Chunk& a, const Chunk& b) { return dot(a.embedding, b.embedding); }","label":"irrelevant"}
+HEAD:training/laya_relevance.jsonl:9:{"query":"What does --no-laya do?","path":"GitTrace/laya_client.h","text":"class LayaClient { public: bool rerank(const std::string& query, ...); };","label":"irrelevant"}
+HEAD:training/laya_relevance.jsonl:16:{"query":"What changed in the commit that introduced reranking?","path":"GitTrace/laya_client.cpp","text":"The current client posts candidates to /rerank and parses relevance and confidence from the response.","label":"irrelevant"}
+HEAD:training/laya_relevance.jsonl:17:{"query":"What changed in the commit that introduced reranking?","path":"README.md","text":"After indexing, the CLI sends vector candidates to the local Laya service for relevance decisions.","label":"related"}
+HEAD:training/laya_relevance.jsonl:18:{"query":"Does this chunk prove that a commit added POST /rerank support?","path":"GitTrace/laya_client.cpp","text":"Commit message: add POST /rerank support and parse direct, related, and irrelevant decisions.","label":"direct"}
+HEAD:training/laya_relevance.jsonl:24:{"query":"Where is the service's default port configured?","path":"GitTrace/laya_client.cpp","text":"curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L);","label":"irrelevant"}
+
+GitTrace search
+
+User query: If the relevance reranker cannot be reached, what does the CLI display?
+
+GitTrace output (hybrid, top 5; query expansion and reranking off):
+1. main.cc:108-131  score=0.0318  cosine=0.3314  lineage-adjusted=0.2940  commit=0674f66369180839f1a13e6878b2d9dfdd8f9cdc
+                std::cout << "Reranker accepted " << accepted << '/' << reranked.size()
+                          << " candidates as relevant.\n";
+                if (accepted == 0) {
+                    std::cout << "No chunks passed the relevance filter.\n";
+                    continue;
+                }
+                std::size_t rank = 0;
+                for (const LayaMatch& match : reranked) {
+                    if (!match.accepted) continue;
+                    print_match(match.match, ++rank, &match);
+                    if (rank == top_k) break;
+                }
+                continue;
+            }
+            std::cerr << "Warning: could not reach the reranker at " << laya_url
+                      << " (" << error << "). Showing vector results without reranking.\n";
+        }
+
+        for (std::size_t i = 0; i < std::min(top_k, matches.size()); ++i) {
+            print_match(matches[i], i + 1);
+        }
+    }
+    std::cout << "Leaving interactive search.\n";
+}
+
+2. main.cc:109-131  score=0.0317  cosine=0.3148  lineage-adjusted=0.3148  commit=7c1352366b18c9a85aa07e624cffa11e43b1cd1b
+                          << " candidates as relevant.\n";
+                if (accepted == 0) {
+                    std::cout << "No chunks passed Laya's relevance filter.\n";
+                    continue;
+                }
+                std::size_t rank = 0;
+                for (const LayaMatch& match : reranked) {
+                    if (!match.accepted) continue;
+                    print_match(match.match, ++rank, &match);
+                    if (rank == top_k) break;
+                }
+                continue;
+            }
+            std::cerr << "Warning: could not reach Laya at " << laya_url
+                      << " (" << error << "). Showing vector results without reranking.\n";
+        }
+
+        for (std::size_t i = 0; i < std::min(top_k, matches.size()); ++i) {
+            print_match(matches[i], i + 1);
+        }
+    }
+    std::cout << "Leaving interactive search.\n";
+}
+
+3. main.cc:163-182  score=0.0298  cosine=0.3223  lineage-adjusted=0.2536  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+                    std::cout << "No chunks passed the relevance filter.\n";
+                    continue;
+                }
+                std::size_t rank = 0;
+                for (const LayaMatch& match : reranked) {
+                    if (!match.accepted) continue;
+                    print_match(match.match, ++rank, &match);
+                    if (rank == top_k) break;
+                }
+                continue;
+            }
+            std::cerr << "Warning: could not reach the reranker at " << laya_url
+                      << " (" << error << "). Showing vector results without reranking.\n";
+        }
+
+        for (std::size_t i = 0; i < std::min(top_k, matches.size()); ++i) {
+            print_match(matches[i], i + 1);
+        }
+    }
+}
+
+4. main.cc:16-32  score=0.0292  cosine=0.3525  lineage-adjusted=0.3525  commit=7c1352366b18c9a85aa07e624cffa11e43b1cd1b
+void print_usage(const char* program)
+{
+    std::cout << "Usage: " << program << " [options] [repository-path]\n"
+              << "\nOptions:\n"
+              << "  -r, --repo PATH      Repository to scan (default: current directory)\n"
+              << "      --no-embeddings  Skip model loading and embedding generation\n"
+              << "      --list           Print each unique file version found\n"
+              << "      --top-k N        Number of similar chunks per query (default: 5)\n"
+              << "      --laya-url URL   Laya reranker URL (default: http://127.0.0.1:8787/rerank)\n"
+              << "      --no-laya        Show vector results without Laya reranking\n"
+              << "      --no-interactive  Finish after indexing without starting the query prompt\n"
+              << "  -h, --help           Show this help\n"
+              << "\nExamples:\n"
+              << "  " << program << " --repo /path/to/project --top-k 8\n"
+              << "  " << program << " --repo /path/to/project --no-embeddings --list\n"
+              << "  " << program << " /path/to/project\n";
+}
+
+5. laya_service.py:205-241  score=0.0292  cosine=0.2756  lineage-adjusted=0.2756  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+        logger.exception("%s reranking failed", request.app.state.backend)
+        raise HTTPException(status_code=502, detail="Reranking failed") from exc
+
+    min_rank = {"direct": 0, "related": 1, "any": 2}[body.min_relevance]
+    results = []
+    for candidate, answer in zip(body.candidates, choices):
+        decision = str(answer.get("choice", answer.get("relevance", "irrelevant"))).lower()
+        if decision not in DECISION_ORDER:
+            decision = "irrelevant"
+        confidence = answer.get("answer_confidence", answer.get("confidence", 0.0))
+        try:
+            confidence = float(confidence)
+        except (TypeError, ValueError):
+            confidence = 0.0
+
+        results.append({
+            "id": candidate.id,
+            "path": candidate.path,
+            "commit_sha": candidate.commit_sha,
+            "start_line": candidate.start_line,
+            "end_line": candidate.end_line,
+            "similarity": candidate.similarity,
+            "relevance": decision,
+            "confidence": confidence,
+            "accepted": DECISION_ORDER[decision] <= min_rank,
+        })
+
+    results.sort(key=lambda item: (
+        DECISION_ORDER[item["relevance"]],
+        -item["confidence"],
+        -(item["similarity"] if item["similarity"] is not None else -1.0),
+    ))
+    return {
+        "query": body.query,
+        "candidate_count": len(body.candidates),
+        "accepted_count": sum(1 for item in results if item["accepted"]),
+        "results": results,

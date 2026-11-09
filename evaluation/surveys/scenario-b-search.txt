@@ -1,0 +1,226 @@
+Scenario B — Ignore rules in history
+
+Intent: The user wants to find out whether repository-local ignore rules affect files while GitTrace walks commit history.
+
+Standard Git search
+
+Command:
+git grep -n -I -i -E 'ignore|exclude' HEAD
+
+Git grep output:
+HEAD:.gitignore:8:.gittraceignore
+HEAD:GitTrace/gittrace.cpp:49:    const std::filesystem::path ignore_path = repository_root / ".gittraceignore";
+HEAD:GitTrace/gittrace.cpp:50:    std::ifstream ignore_file(ignore_path, std::ios::binary);
+HEAD:GitTrace/gittrace.cpp:51:    if (ignore_file) {
+HEAD:GitTrace/gittrace.cpp:52:        std::string rules((std::istreambuf_iterator<char>(ignore_file)),
+HEAD:GitTrace/gittrace.cpp:55:        if (!rules.empty() && git_ignore_add_rule(repo, rules.c_str()) < 0) {
+HEAD:GitTrace/gittrace.cpp:57:            std::cerr << "Could not load " << ignore_path << ": "
+HEAD:GitTrace/gittrace.cpp:58:                      << (e ? e->message : "invalid ignore rule") << '\n';
+HEAD:GitTrace/gittrace.cpp:131:                int ignored = 0;
+HEAD:GitTrace/gittrace.cpp:132:                if (git_ignore_path_is_ignored(&ignored, wcontext->repo, filepath.c_str()) == 0 && ignored) {
+HEAD:README.md:25:Place the compatible `bge-code-v1-q8_0.gguf` model at that path before running the program. Model files are ignored by Git, so each developer needs to provide the file locally.
+HEAD:README.md:54:`GitTrace::beginGitTrace()` reads unique text blob versions from the repository history, collects their filename extensions, and looks up each extension in `GitTrace/rsc/grammar.txt`. For each configured grammar it clones the repository into `GitTrace/rsc/grammars/`, builds the generated parser sources as a shared library, loads the library, and parses the collected blobs. Grammar source checkouts and build products are local and ignored by Git. Subsequent runs reuse the source checkouts and rebuild the parser libraries; to refresh a grammar source checkout, remove its directory under `GitTrace/rsc/grammars/`.
+HEAD:README.md:60:Add a `.gittraceignore` file to the repository root to exclude paths from history collection, parsing, and search indexing. It accepts Git ignore syntax, including comments, glob patterns, directory patterns, and `!` negation rules. For example:
+HEAD:README.md:62:```gittraceignore
+HEAD:README.md:69:Paths ignored by the repository's regular Git ignore files are also excluded.
+
+GitTrace search
+
+User query: Are repository-local ignore rules applied to files throughout the commit history walk?
+
+GitTrace output (hybrid, top 5; query expansion and reranking off):
+1. test.cpp:25-63  score=0.0318  cosine=0.2923  lineage-adjusted=0.2923  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+int main()
+{
+    const fs::path root = fs::temp_directory_path() / "gittrace-retrieval-test";
+    const fs::path repo = root / "repo";
+    std::error_code ec;
+    fs::remove_all(root, ec);
+    fs::create_directories(repo, ec);
+    if (ec) {
+        std::cerr << "Could not create test repository: " << ec.message() << '\n';
+        return 1;
+    }
+
+    const std::string prefix = "git -C \"" + repo.string() + "\" ";
+    const std::vector<std::string> setup = {
+        prefix + "init -q",
+        prefix + "config user.name \"GitTrace Test\"",
+        prefix + "config user.email \"gittrace-test@example.invalid\""
+    };
+    for (const auto& command : setup) {
+        if (!run(command)) {
+            std::cerr << "Failed to initialize test Git repository\n";
+            fs::remove_all(root, ec);
+            return 1;
+        }
+    }
+
+    if (!writeFile(repo / "alpha.txt", "alpha version one\n") ||
+        !writeFile(repo / "unchanged.txt", "kept across commits\n") ||
+        !run(prefix + "add .") || !run(prefix + "commit -q -m first") ||
+        !writeFile(repo / "alpha.txt", "alpha version two\n") ||
+        !writeFile(repo / "beta.txt", "new file in second commit\n") ||
+        !run(prefix + "add .") || !run(prefix + "commit -q -m second")) {
+        std::cerr << "Failed to create test history\n";
+        fs::remove_all(root, ec);
+        return 1;
+    }
+
+    GitTrace trace;
+    if (!trace.init(repo.string().c_str(), false)) {
+
+2. GitTrace/gittrace.cpp:25-61  score=0.0311  cosine=0.3690  lineage-adjusted=0.2574  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+bool GitTrace::init(const char* path = nullptr, bool activate_chunkdb = true)
+{
+    if(initialized) return true;
+
+    if((!path || strlen(path) < 1)) 
+    {
+        std::cerr << "No path provided.\n";
+        return false;
+    }
+    repo_path = new char[strlen(path) + 1];
+    strcpy(repo_path, path);
+    this->activate_chunkdb = activate_chunkdb;
+
+    git_libgit2_init();
+    error = git_repository_open(&repo, repo_path);
+    if(error < 0)
+    {
+        const git_error* e = git_error_last();
+        std::cerr << "Error opening repo: " << repo_path << "\n";
+        return false;
+    }
+    const char* workdir = git_repository_workdir(repo);
+    const std::filesystem::path repository_root = workdir && *workdir
+        ? std::filesystem::path(workdir) : std::filesystem::path(repo_path);
+    const std::filesystem::path ignore_path = repository_root / ".gittraceignore";
+    std::ifstream ignore_file(ignore_path, std::ios::binary);
+    if (ignore_file) {
+        std::string rules((std::istreambuf_iterator<char>(ignore_file)),
+                          std::istreambuf_iterator<char>());
+        if (!rules.empty() && rules.back() != '\n') rules.push_back('\n');
+        if (!rules.empty() && git_ignore_add_rule(repo, rules.c_str()) < 0) {
+            const git_error* e = git_error_last();
+            std::cerr << "Could not load " << ignore_path << ": "
+                      << (e ? e->message : "invalid ignore rule") << '\n';
+            return false;
+        }
+    }
+
+3. GitTrace/gittrace.cpp:50-94  score=0.0294  cosine=0.3305  lineage-adjusted=0.3305  commit=9d755e01956de1d5d8491876715b05d0f719bef5
+void GitTrace::beginGitTrace()
+{
+    if (!repo) {
+        std::cerr << "Cannot read commits before initializing GitTrace\n";
+        return;
+    }
+
+    git_revwalk* walker = nullptr;
+    if (git_revwalk_new(&walker, repo) < 0) {
+        std::cerr << "Could not create commit walker\n";
+        return;
+    }
+    git_revwalk_push_head(walker);
+    std::set<std::string> extensions;
+
+    git_oid oid;
+    std::unordered_set<std::string> seen_blobs;
+    while(git_revwalk_next(&oid, walker) == 0)
+    {
+        git_commit* commit = nullptr;
+        if(git_commit_lookup(&commit, repo, &oid) < 0) continue;
+
+        // SHA
+        char sha[41] = {0};
+        git_oid_tostr(sha, sizeof(sha), &oid);
+
+        // Mod and Author info
+        git_time_t commit_time = git_commit_time(commit);
+        const git_signature* auth = git_commit_author(commit);
+
+        git_tree* tree = nullptr;
+        if(git_commit_tree(&tree, commit) == 0)
+        {
+            struct Context
+            {
+                git_repository* repo;
+                std::string curr_sha, a_name, a_email;
+                int64_t timestamp;
+                std::vector<Blob>* res;
+                std::unordered_set<std::string>* processed_blobs; 
+                std::set<std::string>* extensions;
+            };
+
+            Context context {repo, sha, auth->name, auth->email, static_cast<int64_t>(commit_time), &blobs, &seen_blobs, &extensions};
+
+
+4. GitTrace/gittrace.cpp:115-148  score=0.0293  cosine=0.3487  lineage-adjusted=0.2433  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+            auto tree_recursive = [](const char* root, const git_tree_entry* entry, void* payload) -> int 
+            {
+                if(git_tree_entry_type(entry) != GIT_OBJECT_BLOB)
+                {
+                    return 0;
+                }
+
+                Context* wcontext = static_cast<Context*>(payload);
+                
+                // Generate the string representation of the current blob's OID
+                const git_oid* entry_oid = git_tree_entry_id(entry);
+                char blob_sha[41] = {0};
+                git_oid_tostr(blob_sha, sizeof(blob_sha), entry_oid);
+                std::string blob_hash(blob_sha);
+
+                const std::string filepath = std::string(root) + git_tree_entry_name(entry);
+                int ignored = 0;
+                if (git_ignore_path_is_ignored(&ignored, wcontext->repo, filepath.c_str()) == 0 && ignored) {
+                    return 0;
+                }
+
+                // Skip this file if we have already processed this exact byte-for-byte state
+                if (wcontext->processed_blobs->find(blob_hash) != wcontext->processed_blobs->end()) 
+                {
+                    return 0; 
+                }
+                wcontext->processed_blobs->insert(blob_hash);
+
+                git_blob* blob = nullptr;
+                if(git_blob_lookup(&blob, wcontext->repo, entry_oid) == 0)
+                {
+                    if(!git_blob_is_binary(blob))
+                    {
+                        Blob b;
+
+5. GitTrace/gittrace.cpp:179-209  score=0.0293  cosine=0.2445  lineage-adjusted=0.2445  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+            git_tree_walk(tree, GIT_TREEWALK_PRE, tree_recursive, &context);
+            git_tree_free(tree);
+        }
+        git_commit_free(commit);
+    }
+    git_revwalk_free(walker);
+
+    std::vector<std::string> extension_list(extensions.begin(), extensions.end());
+    TreeSitter tree_sitter("GitTrace/rsc");
+    const bool prepared = tree_sitter.prepare(extension_list);
+    size_t parsed = 0;
+    size_t failed = 0;
+    for(const auto& blob : blobs) 
+    {
+        if(tree_sitter.parse(blob.filepath, reinterpret_cast<const char*>(blob.raw_data.data()), blob.raw_data.size())) 
+        {
+            parsed++;
+        } 
+        else 
+        {
+            failed++;
+        }
+    }
+
+    std::cout << "Tree-sitter parsed " << parsed << " unique file versions";
+    if(failed) std::cout << "; " << failed << " unsupported or invalid";
+    std::cout << "\n";
+    if(!prepared) std::cerr << "One or more grammars were unavailable; see messages above\n";
+
+    if (activate_chunkdb) chunkify(tree_sitter);
+}

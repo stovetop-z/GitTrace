@@ -1,0 +1,359 @@
+Loading...
+Retrieval mode: hybrid
+Query expansion: on
+
+Query: What calculation downweights chunks from older revisions during search?
+
+1. GitTrace/chunkdb/chunkdb.cpp:230-246  score=0.0323  cosine=0.3614  lineage-adjusted=0.2843  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+std::vector<ChunkMatch> ChunkDB::search(const std::string& query, std::size_t k)
+{
+    const std::vector<float> query_embedding = embed(query, true, false);
+    if (query_embedding.empty() || k == 0) return {};
+
+    std::vector<ChunkMatch> matches;
+    matches.reserve(chunks.size());
+    for (const Chunk& chunk : chunks) {
+        const float decay = std::exp(-0.12f * static_cast<float>(chunk.lineage_depth));
+        matches.push_back({&chunk, cosineSimilarity(query_embedding, chunk.embedding) * decay});
+    }
+    std::sort(matches.begin(), matches.end(), [](const ChunkMatch& lhs, const ChunkMatch& rhs) {
+        return lhs.similarity > rhs.similarity;
+    });
+    if (matches.size() > k) matches.resize(k);
+    return matches;
+}
+
+2. GitTrace/gittrace.cpp:186-193  score=0.0310  cosine=0.2563  lineage-adjusted=0.2563  commit=0674f66369180839f1a13e6878b2d9dfdd8f9cdc
+std::vector<ChunkMatch> GitTrace::searchChunks(const std::string& query, std::size_t k)
+{
+    if (!initialized || !activate_chunkdb) {
+        std::cerr << "Cannot search chunks: embedding database is not active\n";
+        return {};
+    }
+    return chunkdb.search(query, k);
+}
+
+3. GitTrace/chunkdb/chunkdb.cpp:147-170  score=0.0309  cosine=0.3778  lineage-adjusted=0.3778  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+void ChunkDB::inferLineages()
+{
+    std::vector<std::size_t> chronological(chunks.size());
+    for (std::size_t i = 0; i < chronological.size(); ++i) chronological[i] = i;
+    std::stable_sort(chronological.begin(), chronological.end(), [&](std::size_t a, std::size_t b) {
+        if (chunks[a].filepath != chunks[b].filepath) return chunks[a].filepath < chunks[b].filepath;
+        return chunks[a].commit_time < chunks[b].commit_time;
+    });
+
+    for (std::size_t position = 0; position < chronological.size(); ++position) {
+        Chunk& current = chunks[chronological[position]];
+        float best_score = 0.78f;
+        const Chunk* best_parent = nullptr;
+        for (std::size_t prior = position; prior > 0; --prior) {
+            const Chunk& candidate = chunks[chronological[prior - 1]];
+            if (candidate.filepath != current.filepath) break;
+            if (candidate.commit_time >= current.commit_time ||
+                candidate.syntax_type != current.syntax_type) continue;
+            const float semantic = cosineSimilarity(current.embedding, candidate.embedding);
+            const uint32_t delta = current.syntax_ordinal > candidate.syntax_ordinal
+                ? current.syntax_ordinal - candidate.syntax_ordinal
+                : candidate.syntax_ordinal - current.syntax_ordinal;
+            const float topology = 1.0f / (1.0f + 0.15f * static_cast<float>(delta));
+            const float score = 0.85f * semantic + 0.15f * topology;
+
+Query: Are repository-local ignore rules applied to files throughout the commit history walk?
+
+1. test.cpp:25-63  score=0.0315  cosine=0.2923  lineage-adjusted=0.2923  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+int main()
+{
+    const fs::path root = fs::temp_directory_path() / "gittrace-retrieval-test";
+    const fs::path repo = root / "repo";
+    std::error_code ec;
+    fs::remove_all(root, ec);
+    fs::create_directories(repo, ec);
+    if (ec) {
+        std::cerr << "Could not create test repository: " << ec.message() << '\n';
+        return 1;
+    }
+
+    const std::string prefix = "git -C \"" + repo.string() + "\" ";
+    const std::vector<std::string> setup = {
+        prefix + "init -q",
+        prefix + "config user.name \"GitTrace Test\"",
+        prefix + "config user.email \"gittrace-test@example.invalid\""
+    };
+    for (const auto& command : setup) {
+        if (!run(command)) {
+            std::cerr << "Failed to initialize test Git repository\n";
+            fs::remove_all(root, ec);
+            return 1;
+        }
+    }
+
+    if (!writeFile(repo / "alpha.txt", "alpha version one\n") ||
+        !writeFile(repo / "unchanged.txt", "kept across commits\n") ||
+        !run(prefix + "add .") || !run(prefix + "commit -q -m first") ||
+        !writeFile(repo / "alpha.txt", "alpha version two\n") ||
+        !writeFile(repo / "beta.txt", "new file in second commit\n") ||
+        !run(prefix + "add .") || !run(prefix + "commit -q -m second")) {
+        std::cerr << "Failed to create test history\n";
+        fs::remove_all(root, ec);
+        return 1;
+    }
+
+    GitTrace trace;
+    if (!trace.init(repo.string().c_str(), false)) {
+
+2. GitTrace/gittrace.cpp:25-61  score=0.0311  cosine=0.3690  lineage-adjusted=0.2574  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+bool GitTrace::init(const char* path = nullptr, bool activate_chunkdb = true)
+{
+    if(initialized) return true;
+
+    if((!path || strlen(path) < 1)) 
+    {
+        std::cerr << "No path provided.\n";
+        return false;
+    }
+    repo_path = new char[strlen(path) + 1];
+    strcpy(repo_path, path);
+    this->activate_chunkdb = activate_chunkdb;
+
+    git_libgit2_init();
+    error = git_repository_open(&repo, repo_path);
+    if(error < 0)
+    {
+        const git_error* e = git_error_last();
+        std::cerr << "Error opening repo: " << repo_path << "\n";
+        return false;
+    }
+    const char* workdir = git_repository_workdir(repo);
+    const std::filesystem::path repository_root = workdir && *workdir
+        ? std::filesystem::path(workdir) : std::filesystem::path(repo_path);
+    const std::filesystem::path ignore_path = repository_root / ".gittraceignore";
+    std::ifstream ignore_file(ignore_path, std::ios::binary);
+    if (ignore_file) {
+        std::string rules((std::istreambuf_iterator<char>(ignore_file)),
+                          std::istreambuf_iterator<char>());
+        if (!rules.empty() && rules.back() != '\n') rules.push_back('\n');
+        if (!rules.empty() && git_ignore_add_rule(repo, rules.c_str()) < 0) {
+            const git_error* e = git_error_last();
+            std::cerr << "Could not load " << ignore_path << ": "
+                      << (e ? e->message : "invalid ignore rule") << '\n';
+            return false;
+        }
+    }
+
+3. GitTrace/gittrace.cpp:115-148  score=0.0298  cosine=0.3487  lineage-adjusted=0.2433  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+            auto tree_recursive = [](const char* root, const git_tree_entry* entry, void* payload) -> int 
+            {
+                if(git_tree_entry_type(entry) != GIT_OBJECT_BLOB)
+                {
+                    return 0;
+                }
+
+                Context* wcontext = static_cast<Context*>(payload);
+                
+                // Generate the string representation of the current blob's OID
+                const git_oid* entry_oid = git_tree_entry_id(entry);
+                char blob_sha[41] = {0};
+                git_oid_tostr(blob_sha, sizeof(blob_sha), entry_oid);
+                std::string blob_hash(blob_sha);
+
+                const std::string filepath = std::string(root) + git_tree_entry_name(entry);
+                int ignored = 0;
+                if (git_ignore_path_is_ignored(&ignored, wcontext->repo, filepath.c_str()) == 0 && ignored) {
+                    return 0;
+                }
+
+                // Skip this file if we have already processed this exact byte-for-byte state
+                if (wcontext->processed_blobs->find(blob_hash) != wcontext->processed_blobs->end()) 
+                {
+                    return 0; 
+                }
+                wcontext->processed_blobs->insert(blob_hash);
+
+                git_blob* blob = nullptr;
+                if(git_blob_lookup(&blob, wcontext->repo, entry_oid) == 0)
+                {
+                    if(!git_blob_is_binary(blob))
+                    {
+                        Blob b;
+
+Query: Can a retrieved code snippet override Gemini reranking instructions?
+
+1. main.cc:75-108  score=0.0313  cosine=0.2342  lineage-adjusted=0.2342  commit=7c1352366b18c9a85aa07e624cffa11e43b1cd1b
+void run_query_prompt(GitTrace& trace, std::size_t top_k,
+                      bool use_laya, const std::string& laya_url)
+{
+    std::cout << "\nInteractive chunk search (enter :q to quit, :help for help).\n";
+    if (use_laya) std::cout << "Laya reranker: " << laya_url << '\n';
+    LayaClient laya(laya_url);
+    std::string query;
+    while (true) {
+        std::cout << "query> " << std::flush;
+        if (!std::getline(std::cin, query)) break;
+        if (query == ":q" || query == ":quit" || query == "exit") break;
+        if (query == ":help") {
+            std::cout << "Type a natural-language or code query. Use :q to quit.\n";
+            continue;
+        }
+        if (query.empty()) continue;
+
+        const std::size_t candidate_k = use_laya
+            ? (top_k >= 16 ? 32 : top_k * 2)
+            : top_k;
+        const std::vector<ChunkMatch> matches = trace.searchChunks(query, candidate_k);
+        if (matches.empty()) {
+            std::cout << "No matching chunks found.\n";
+            continue;
+        }
+
+        if (use_laya) {
+            std::vector<LayaMatch> reranked;
+            std::string error;
+            std::cout << "Laya assessing " << matches.size() << " candidates...\n";
+            if (laya.rerank(query, matches, reranked, error)) {
+                std::size_t accepted = 0;
+                for (const LayaMatch& match : reranked) if (match.accepted) ++accepted;
+                std::cout << "Laya accepted " << accepted << '/' << reranked.size()
+
+2. main.cc:75-107  score=0.0309  cosine=0.2349  lineage-adjusted=0.2084  commit=0674f66369180839f1a13e6878b2d9dfdd8f9cdc
+void run_query_prompt(GitTrace& trace, std::size_t top_k,
+                      bool use_laya, const std::string& laya_url)
+{
+    std::cout << "\nInteractive chunk search (enter :q to quit, :help for help).\n";
+    if (use_laya) std::cout << "Relevance reranker: " << laya_url << '\n';
+    LayaClient laya(laya_url);
+    std::string query;
+    while (true) {
+        std::cout << "query> " << std::flush;
+        if (!std::getline(std::cin, query)) break;
+        if (query == ":q" || query == ":quit" || query == "exit") break;
+        if (query == ":help") {
+            std::cout << "Type a natural-language or code query. Use :q to quit.\n";
+            continue;
+        }
+        if (query.empty()) continue;
+
+        const std::size_t candidate_k = use_laya
+            ? (top_k >= 16 ? 32 : top_k * 2)
+            : top_k;
+        const std::vector<ChunkMatch> matches = trace.searchChunks(query, candidate_k);
+        if (matches.empty()) {
+            std::cout << "No matching chunks found.\n";
+            continue;
+        }
+
+        if (use_laya) {
+            std::vector<LayaMatch> reranked;
+            std::string error;
+            std::cout << "Reranker assessing " << matches.size() << " candidates...\n";
+            if (laya.rerank(query, matches, reranked, error)) {
+                std::size_t accepted = 0;
+                for (const LayaMatch& match : reranked) if (match.accepted) ++accepted;
+
+3. main.cc:129-162  score=0.0293  cosine=0.2364  lineage-adjusted=0.1859  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+void run_query_prompt(GitTrace& trace, std::size_t top_k,
+                      bool use_laya, const std::string& laya_url)
+{
+    LayaClient laya(laya_url);
+    std::string query;
+    while (true) {
+        std::cout << "query> " << std::flush;
+        if (!std::getline(std::cin, query)) break;
+        if (query == ":q" || query == ":quit" || query == "exit") break;
+        if (query == ":help") {
+            std::cout << "Type a natural-language or code query. Use :q to quit.\n";
+            continue;
+        }
+        if (query.empty()) continue;
+
+        const std::size_t candidate_k = use_laya
+            ? (top_k >= 16 ? 32 : top_k * 2)
+            : top_k;
+        const std::vector<ChunkMatch> matches = trace.searchChunks(query, candidate_k);
+        if (matches.empty()) {
+            std::cout << "No matching chunks found.\n";
+            continue;
+        }
+
+        if (use_laya) {
+            std::vector<LayaMatch> reranked;
+            std::string error;
+            std::cout << "Reranker assessing " << matches.size() << " candidates...\n";
+            if (laya.rerank(query, matches, reranked, error)) {
+                std::size_t accepted = 0;
+                for (const LayaMatch& match : reranked) if (match.accepted) ++accepted;
+                std::cout << "Reranker accepted " << accepted << '/' << reranked.size()
+                          << " candidates as relevant.\n";
+                if (accepted == 0) {
+
+Query: If the relevance reranker cannot be reached, what does the CLI display?
+
+1. main.cc:108-131  score=0.0318  cosine=0.3314  lineage-adjusted=0.2940  commit=0674f66369180839f1a13e6878b2d9dfdd8f9cdc
+                std::cout << "Reranker accepted " << accepted << '/' << reranked.size()
+                          << " candidates as relevant.\n";
+                if (accepted == 0) {
+                    std::cout << "No chunks passed the relevance filter.\n";
+                    continue;
+                }
+                std::size_t rank = 0;
+                for (const LayaMatch& match : reranked) {
+                    if (!match.accepted) continue;
+                    print_match(match.match, ++rank, &match);
+                    if (rank == top_k) break;
+                }
+                continue;
+            }
+            std::cerr << "Warning: could not reach the reranker at " << laya_url
+                      << " (" << error << "). Showing vector results without reranking.\n";
+        }
+
+        for (std::size_t i = 0; i < std::min(top_k, matches.size()); ++i) {
+            print_match(matches[i], i + 1);
+        }
+    }
+    std::cout << "Leaving interactive search.\n";
+}
+
+2. main.cc:109-131  score=0.0317  cosine=0.3148  lineage-adjusted=0.3148  commit=7c1352366b18c9a85aa07e624cffa11e43b1cd1b
+                          << " candidates as relevant.\n";
+                if (accepted == 0) {
+                    std::cout << "No chunks passed Laya's relevance filter.\n";
+                    continue;
+                }
+                std::size_t rank = 0;
+                for (const LayaMatch& match : reranked) {
+                    if (!match.accepted) continue;
+                    print_match(match.match, ++rank, &match);
+                    if (rank == top_k) break;
+                }
+                continue;
+            }
+            std::cerr << "Warning: could not reach Laya at " << laya_url
+                      << " (" << error << "). Showing vector results without reranking.\n";
+        }
+
+        for (std::size_t i = 0; i < std::min(top_k, matches.size()); ++i) {
+            print_match(matches[i], i + 1);
+        }
+    }
+    std::cout << "Leaving interactive search.\n";
+}
+
+3. main.cc:16-32  score=0.0315  cosine=0.3525  lineage-adjusted=0.3525  commit=7c1352366b18c9a85aa07e624cffa11e43b1cd1b
+void print_usage(const char* program)
+{
+    std::cout << "Usage: " << program << " [options] [repository-path]\n"
+              << "\nOptions:\n"
+              << "  -r, --repo PATH      Repository to scan (default: current directory)\n"
+              << "      --no-embeddings  Skip model loading and embedding generation\n"
+              << "      --list           Print each unique file version found\n"
+              << "      --top-k N        Number of similar chunks per query (default: 5)\n"
+              << "      --laya-url URL   Laya reranker URL (default: http://127.0.0.1:8787/rerank)\n"
+              << "      --no-laya        Show vector results without Laya reranking\n"
+              << "      --no-interactive  Finish after indexing without starting the query prompt\n"
+              << "  -h, --help           Show this help\n"
+              << "\nExamples:\n"
+              << "  " << program << " --repo /path/to/project --top-k 8\n"
+              << "  " << program << " --repo /path/to/project --no-embeddings --list\n"
+              << "  " << program << " /path/to/project\n";
+}

@@ -2,7 +2,9 @@ llama.cpp/
 GitTrace/chunkdb/embedder/
 GitTrace/rsc/grammars/
 build/
+/build-release/
 dev.log
 .vscode/
 .vgittrace/
 .gittraceignore
+.gittrace/

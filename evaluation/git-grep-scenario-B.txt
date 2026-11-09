@@ -1,0 +1,15 @@
+HEAD:.gitignore:8:.gittraceignore
+HEAD:GitTrace/gittrace.cpp:49:    const std::filesystem::path ignore_path = repository_root / ".gittraceignore";
+HEAD:GitTrace/gittrace.cpp:50:    std::ifstream ignore_file(ignore_path, std::ios::binary);
+HEAD:GitTrace/gittrace.cpp:51:    if (ignore_file) {
+HEAD:GitTrace/gittrace.cpp:52:        std::string rules((std::istreambuf_iterator<char>(ignore_file)),
+HEAD:GitTrace/gittrace.cpp:55:        if (!rules.empty() && git_ignore_add_rule(repo, rules.c_str()) < 0) {
+HEAD:GitTrace/gittrace.cpp:57:            std::cerr << "Could not load " << ignore_path << ": "
+HEAD:GitTrace/gittrace.cpp:58:                      << (e ? e->message : "invalid ignore rule") << '\n';
+HEAD:GitTrace/gittrace.cpp:131:                int ignored = 0;
+HEAD:GitTrace/gittrace.cpp:132:                if (git_ignore_path_is_ignored(&ignored, wcontext->repo, filepath.c_str()) == 0 && ignored) {
+HEAD:README.md:25:Place the compatible `bge-code-v1-q8_0.gguf` model at that path before running the program. Model files are ignored by Git, so each developer needs to provide the file locally.
+HEAD:README.md:54:`GitTrace::beginGitTrace()` reads unique text blob versions from the repository history, collects their filename extensions, and looks up each extension in `GitTrace/rsc/grammar.txt`. For each configured grammar it clones the repository into `GitTrace/rsc/grammars/`, builds the generated parser sources as a shared library, loads the library, and parses the collected blobs. Grammar source checkouts and build products are local and ignored by Git. Subsequent runs reuse the source checkouts and rebuild the parser libraries; to refresh a grammar source checkout, remove its directory under `GitTrace/rsc/grammars/`.
+HEAD:README.md:60:Add a `.gittraceignore` file to the repository root to exclude paths from history collection, parsing, and search indexing. It accepts Git ignore syntax, including comments, glob patterns, directory patterns, and `!` negation rules. For example:
+HEAD:README.md:62:```gittraceignore
+HEAD:README.md:69:Paths ignored by the repository's regular Git ignore files are also excluded.

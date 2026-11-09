@@ -13,6 +13,7 @@ GitTrace is a C++ prototype for analyzing source files across a Git repository's
 - Network access on the first run for each grammar used by the repository
 - The `llama.cpp` source directory included in this repository
 - The embedding model file described below
+- SQLite 3 development library (discovered through `pkg-config` as `sqlite3`)
 
 ## Embedding model
 
@@ -29,11 +30,13 @@ Place the compatible `bge-code-v1-q8_0.gguf` model at that path before running t
 From the repository root, configure and build with:
 
 ```sh
-cmake -S . -B build -DLIBGIT2_ROOT=/path/to/libgit2-install
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLIBGIT2_ROOT=/path/to/libgit2-install
 cmake --build build -j2
 ```
 
 `LIBGIT2_ROOT` should point to the prefix containing libgit2's CMake package files. This project currently defaults it to `/Users/stovetop/lib/libgit2-install`; pass your own path when libgit2 is installed elsewhere.
+
+Use a Release build for normal indexing. On macOS, GitTrace can use Metal when the process has access to the system GPU. During a cold index, the CLI reports the selected backend and embedding progress; Debug builds can make CPU embedding substantially slower.
 
 ## Run GitTrace
 
@@ -45,9 +48,30 @@ Run from the repository root so the relative model and grammar paths resolve. Wi
 ./build/GitTrace --repo /path/to/repository --top-k 8
 ```
 
-After indexing, the CLI accepts natural-language or code queries. It retrieves a wider vector-search candidate set, then posts those candidates to the local reranking service for relevance decisions. It displays only candidates accepted as `direct` or `related`; if the service is unavailable, it warns and displays the unreranked vector results. Use `--no-laya` to bypass reranking or `--laya-url URL` to change the service endpoint. `GITTRACE_LAYA_URL` can also set the endpoint. `--no-interactive` ends after indexing.
+After indexing, the CLI accepts natural-language or code queries. By default it combines vector and BM25 keyword rankings with reciprocal rank fusion, then posts the top candidates to the local reranking service for relevance decisions. Use `--retrieval-mode vector`, `keyword`, or `hybrid` to compare the retrieval lanes; `keyword` uses normalized BM25 terms without embedding the query. Keyword matching lowercases tokens, splits common identifier boundaries, and normalizes basic plural and verb endings. Add `--query-expansion` to include a small weighted synonym map in the lexical lane; it is off by default so the unexpanded baseline remains easy to reproduce. Results show the retrieval score, raw cosine, and lineage-adjusted similarity separately. The CLI displays only candidates accepted as `direct` or `related`; if the service is unavailable, it warns and displays results from the selected retrieval mode. Use `--no-laya` to bypass reranking or `--laya-url URL` to change the service endpoint. `GITTRACE_LAYA_URL` can also set the endpoint. `--no-interactive` ends after indexing.
+
+For example, to inspect exact keyword matches without a reranker:
+
+```sh
+./build/GitTrace --repo /path/to/repository --retrieval-mode keyword --no-laya --top-k 10
+```
+
+For repeatable comparisons, pass one or more `--query` arguments. GitTrace indexes once, prints each query's ranked results, and exits:
+
+```sh
+./build/GitTrace --repo /path/to/repository --retrieval-mode hybrid \
+  --no-laya --top-k 5 \
+  --query "Where is the lineage decay applied?" \
+  --query "How are ignored paths handled during the history walk?"
+```
+
+Queries use BGE-Code-v1's retrieval instruction format by default. Pass `--query-format raw` to compare against the previous unprefixed query embedding; this is intended for retrieval evaluation. Corpus chunks remain embedded as source text in either mode.
 
 At startup the CLI displays `Loading...` while initialization and indexing output is appended to `dev.log` in the current working directory. In interactive mode, successful startup proceeds directly to the `query>` prompt. Initialization and runtime errors are written to the same log.
+
+Embedding-enabled runs save their chunks and embeddings in `.gittrace/index.sqlite` inside the scanned repository. An unchanged HEAD reuses the cached index. When HEAD advances from the cached commit, GitTrace walks only the new commits, adds their path/commit occurrences, and embeds only unseen file states. If history diverges or index settings change, it rebuilds the occurrence map or the full index as needed. Use `--index PATH` to choose another SQLite file and `--index-status` to inspect compatibility without loading the embedding model. The database contains source snippets and vectors, so keep it local and remove `.gittrace/` to delete the default cache. Use `--rebuild-index` to force a fresh scan and replace the cached index. `--profile PATH` writes JSON counts and stage timings for indexing, queries, and cache load/save.
+
+The cache fingerprint includes the repository `HEAD`, model path/size/modified time, platform, nested `.gitignore` files, `.git/info/exclude`, configured global excludes, grammar revisions and parser/scanner file metadata, Tree-sitter ABI, compiler version, chunker version, and embedding input version. Model and grammar source files are fingerprinted by metadata rather than full content hashes; if one is replaced while preserving both size and modification time, use `--rebuild-index`.
 
 ## Git history grammar parsing
 
@@ -124,7 +148,7 @@ The response keeps each caller-provided `id`, so GitTrace can join the decisions
 
 ```text
 main.cc                   Git history scanner entry point
-GitTrace/chunkdb/         In-memory embedding and similarity search
+GitTrace/chunkdb/         Embeddings, retrieval, and SQLite index persistence
 GitTrace/laya_client.*    HTTP client for the relevance service
 GitTrace/utils/           Tree-sitter grammar loading and parsing
 GitTrace/rsc/grammar.txt   File-extension to grammar manifest
@@ -133,6 +157,6 @@ llama.cpp/                llama.cpp dependency
 CMakeLists.txt            Build configuration
 ```
 
-The project is under active development. The in-memory index is rebuilt for each run and is not persisted between runs.
+The project is under active development. The current SQLite cache reuses a whole index for an unchanged manifest; incremental commit-by-commit refresh is not implemented yet.
 
 Historical chunks are aligned heuristically within the same file. GitTrace compares chunks from older versions using embedding similarity, syntax-node type, and their relative order in the file. A matched chunk inherits a lineage depth; search similarity is then reduced by `exp(-0.12 × depth)` so newer versions rank ahead when otherwise equally relevant. This is a per-file snapshot heuristic: it does not currently use Git parent/merge relationships, and unmatched or low-confidence chunks start new lineages.

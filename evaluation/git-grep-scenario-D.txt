@@ -1,0 +1,49 @@
+HEAD:GitTrace/gittrace.cpp:223:    constexpr size_t MAX_FALLBACK_BYTES = 1500;
+HEAD:GitTrace/gittrace.cpp:232:            for (size_t offset = 0; offset < length; offset += MAX_FALLBACK_BYTES) {
+HEAD:GitTrace/gittrace.cpp:233:                const size_t chunk_length = std::min(MAX_FALLBACK_BYTES, length - offset);
+HEAD:GitTrace/gittrace.cpp:242:                                                     blob.time_mod, "fallback", 0, 0);
+HEAD:GitTrace/laya_client.cpp:38:bool LayaClient::rerank(const std::string& query,
+HEAD:GitTrace/laya_client.cpp:92:    curl_easy_setopt(curl.get(), CURLOPT_CONNECTTIMEOUT_MS, 1500L);
+HEAD:GitTrace/laya_client.cpp:93:    curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT_MS, 60000L);
+HEAD:GitTrace/laya_client.cpp:105:        error = "Reranker service returned HTTP " + std::to_string(status);
+HEAD:GitTrace/laya_client.h:25:    bool rerank(const std::string& query,
+HEAD:README.md:48:After indexing, the CLI accepts natural-language or code queries. It retrieves a wider vector-search candidate set, then posts those candidates to the local reranking service for relevance decisions. It displays only candidates accepted as `direct` or `related`; if the service is unavailable, it warns and displays the unreranked vector results. Use `--no-laya` to bypass reranking or `--laya-url URL` to change the service endpoint. `GITTRACE_LAYA_URL` can also set the endpoint. `--no-interactive` ends after indexing.
+HEAD:README.md:73:`laya_service.py` is a local HTTP sidecar for the C++ CLI. Start it before running an embedding-enabled GitTrace scan. GitTrace sends its vector-search candidates to `POST /rerank`; the selected backend returns a `direct`, `related`, or `irrelevant` decision, confidence, original similarity, and an `accepted` flag. It listens on `127.0.0.1:8787` by default. Laya is the default backend and loads its English checkpoint once when it starts. Laya judges relevance; neither backend proves that a chunk is factually correct.
+HEAD:README.md:92:export GITTRACE_RERANKER=gemini
+HEAD:README.md:97:Set `GITTRACE_RERANKER=laya` (the default) to use Laya instead. The C++ client and `/rerank` response format are the same for both backends. The Gemini backend groups candidates in small batches and requests structured JSON classifications.
+HEAD:README.md:102:curl -s http://127.0.0.1:8787/rerank \
+HEAD:README.md:121:The response keeps each caller-provided `id`, so GitTrace can join the decisions back to its chunks. `min_relevance` accepts `direct`, `related` (the default), or `any`; every result is returned in relevance order with an `accepted` flag. Requests accept up to 64 candidates. The request's `max_len` defaults to 256 tokens to keep reranking responsive; the English checkpoint supports up to 512. Set `GITTRACE_LAYA_HOST` and `GITTRACE_LAYA_PORT` to change the bind address and port. Set `GITTRACE_LAYA_MODEL` or `GITTRACE_LAYA_SUBFOLDER` to select a different checkpoint.
+HEAD:README.md:131:laya_service.py           Local Laya or Gemini relevance reranker
+HEAD:laya_service.py:1:"""Local relevance reranking service for GitTrace search candidates."""
+HEAD:laya_service.py:57:class RerankRequest(BaseModel):
+HEAD:laya_service.py:68:    backend = os.environ.get("GITTRACE_RERANKER", "laya").strip().lower()
+HEAD:laya_service.py:88:            logger.info("Configured Gemini reranker model %s", app.state.model_id)
+HEAD:laya_service.py:90:            raise RuntimeError("GITTRACE_RERANKER must be 'laya' or 'gemini'")
+HEAD:laya_service.py:92:        logger.exception("Could not initialize %s reranker", backend)
+HEAD:laya_service.py:93:        raise RuntimeError(f"Could not initialize {backend} reranker: {exc}") from exc
+HEAD:laya_service.py:98:    title="GitTrace Relevance Reranker",
+HEAD:laya_service.py:115:def _gemini_predictions(body: RerankRequest, client: object, model_id: str) -> list[dict[str, object]]:
+HEAD:laya_service.py:177:@app.post("/rerank")
+HEAD:laya_service.py:178:def rerank(body: RerankRequest, request: Request) -> dict[str, object]:
+HEAD:laya_service.py:201:        logger.info("Reranked %d candidates with %s in %.2fs", len(body.candidates), request.app.state.backend, time.perf_counter() - started)
+HEAD:laya_service.py:205:        logger.exception("%s reranking failed", request.app.state.backend)
+HEAD:laya_service.py:206:        raise HTTPException(status_code=502, detail="Reranking failed") from exc
+HEAD:main.cc:78:              << "      --laya-url URL   Laya reranker URL (default: http://127.0.0.1:8787/rerank)\n"
+HEAD:main.cc:79:              << "      --no-laya        Show vector results without Laya reranking\n"
+HEAD:main.cc:154:            std::vector<LayaMatch> reranked;
+HEAD:main.cc:156:            std::cout << "Reranker assessing " << matches.size() << " candidates...\n";
+HEAD:main.cc:157:            if (laya.rerank(query, matches, reranked, error)) {
+HEAD:main.cc:159:                for (const LayaMatch& match : reranked) if (match.accepted) ++accepted;
+HEAD:main.cc:160:                std::cout << "Reranker accepted " << accepted << '/' << reranked.size()
+HEAD:main.cc:167:                for (const LayaMatch& match : reranked) {
+HEAD:main.cc:174:            std::cerr << "Warning: could not reach the reranker at " << laya_url
+HEAD:main.cc:175:                      << " (" << error << "). Showing vector results without reranking.\n";
+HEAD:main.cc:196:        ? configured_laya_url : "http://127.0.0.1:8787/rerank";
+HEAD:training/laya_relevance.jsonl:4:{"query":"How does the CLI contact the reranker?","path":"GitTrace/laya_client.cpp","text":"curl_easy_setopt(curl, CURLOPT_URL, endpoint.c_str()); curl_easy_setopt(curl, CURLOPT_POSTFIELDS, request_body.c_str());","label":"direct"}
+HEAD:training/laya_relevance.jsonl:5:{"query":"How does the CLI contact the reranker?","path":"main.cc","text":"LayaClient laya(laya_url); if (!laya.rerank(query, matches, reranked, error)) ...","label":"related"}
+HEAD:training/laya_relevance.jsonl:6:{"query":"How does the CLI contact the reranker?","path":"GitTrace/chunkdb/chunkdb.cpp","text":"float ChunkDB::similarity(const Chunk& a, const Chunk& b) { return dot(a.embedding, b.embedding); }","label":"irrelevant"}
+HEAD:training/laya_relevance.jsonl:9:{"query":"What does --no-laya do?","path":"GitTrace/laya_client.h","text":"class LayaClient { public: bool rerank(const std::string& query, ...); };","label":"irrelevant"}
+HEAD:training/laya_relevance.jsonl:16:{"query":"What changed in the commit that introduced reranking?","path":"GitTrace/laya_client.cpp","text":"The current client posts candidates to /rerank and parses relevance and confidence from the response.","label":"irrelevant"}
+HEAD:training/laya_relevance.jsonl:17:{"query":"What changed in the commit that introduced reranking?","path":"README.md","text":"After indexing, the CLI sends vector candidates to the local Laya service for relevance decisions.","label":"related"}
+HEAD:training/laya_relevance.jsonl:18:{"query":"Does this chunk prove that a commit added POST /rerank support?","path":"GitTrace/laya_client.cpp","text":"Commit message: add POST /rerank support and parse direct, related, and irrelevant decisions.","label":"direct"}
+HEAD:training/laya_relevance.jsonl:24:{"query":"Where is the service's default port configured?","path":"GitTrace/laya_client.cpp","text":"curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L);","label":"irrelevant"}

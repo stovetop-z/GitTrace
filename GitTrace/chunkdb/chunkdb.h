@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+enum class RetrievalMode { Vector, Keyword, Hybrid };
+
 class ChunkDB
 {
 private:
@@ -17,6 +19,7 @@ private:
     const llama_vocab* vcb = nullptr;
     llama_context* ctx = nullptr;
     llama_model* model = nullptr;
+    std::string backend_name = "not initialized";
 
     uint32_t curr_seq_id;
 
@@ -26,7 +29,7 @@ private:
                   const std::string& commit_sha, const std::string& filepath,
                   uint32_t start_line, uint32_t end_line, int64_t commit_time,
                   const std::string& syntax_type, uint32_t lineage_depth,
-                  uint32_t syntax_ordinal);
+                  uint32_t syntax_ordinal, const std::vector<GitOccurrence>& occurrences);
     void inferLineages();
     std::vector<llama_token> tokenize(const std::string& input, bool add_special);
     float cosineSimilarity(const std::vector<float>& v1, const std::vector<float>& v2);
@@ -36,15 +39,25 @@ public:
     ~ChunkDB();
 
     bool init();
+    const std::string& backendName() const { return backend_name; }
+    int32_t embeddingThreads() const { return ctx ? llama_n_threads(ctx) : 0; }
     std::vector<float> embed(const std::string& input, bool add_special = true, bool store = true,
                              const std::string& commit_sha = {}, const std::string& filepath = {},
                              uint32_t start_line = 0, uint32_t end_line = 0,
                              int64_t commit_time = 0, const std::string& syntax_type = {},
-                             uint32_t lineage_depth = 0, uint32_t syntax_ordinal = 0);
+                             uint32_t lineage_depth = 0, uint32_t syntax_ordinal = 0,
+                             const std::vector<GitOccurrence>& occurrences = {});
     void alignHistoricalChunks();
+    const std::vector<Chunk>& getChunks() const { return chunks; }
+    std::vector<Chunk>& getMutableChunks() { return chunks; }
+    void replaceChunks(std::vector<Chunk> loaded_chunks);
+    void pruneChunksWithoutOccurrences();
 
     std::vector<Chunk*> getSimilarChunks(const std::vector<float>& embedding, uint8_t k = 3);
-    std::vector<ChunkMatch> search(const std::string& query, std::size_t k = 5);
+    std::vector<ChunkMatch> search(const std::string& query, std::size_t k = 5,
+                                   bool use_retrieval_instruction = true,
+                                   RetrievalMode mode = RetrievalMode::Hybrid,
+                                   bool expand_query_terms = false);
 };
 
 #endif

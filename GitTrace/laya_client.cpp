@@ -61,7 +61,7 @@ bool LayaClient::rerank(const std::string& query,
             {"id", id},
             {"path", chunk.filepath},
             {"text", chunk.input.substr(0, 12000)},
-            {"similarity", candidate.similarity},
+            {"similarity", candidate.raw_cosine_similarity},
             {"commit_sha", chunk.commit_sha},
             {"start_line", chunk.start_line},
             {"end_line", chunk.end_line}

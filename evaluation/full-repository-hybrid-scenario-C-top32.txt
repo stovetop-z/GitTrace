@@ -1,0 +1,1885 @@
+Loading...
+query> 
+1. main.cc:75-131  score=0.0318  cosine=0.2178  commit=7c1352366b18c9a85aa07e624cffa11e43b1cd1b
+void run_query_prompt(GitTrace& trace, std::size_t top_k,
+                      bool use_laya, const std::string& laya_url)
+{
+    std::cout << "\nInteractive chunk search (enter :q to quit, :help for help).\n";
+    if (use_laya) std::cout << "Laya reranker: " << laya_url << '\n';
+    LayaClient laya(laya_url);
+    std::string query;
+    while (true) {
+        std::cout << "query> " << std::flush;
+        if (!std::getline(std::cin, query)) break;
+        if (query == ":q" || query == ":quit" || query == "exit") break;
+        if (query == ":help") {
+            std::cout << "Type a natural-language or code query. Use :q to quit.\n";
+            continue;
+        }
+        if (query.empty()) continue;
+
+        const std::size_t candidate_k = use_laya
+            ? (top_k >= 16 ? 32 : top_k * 2)
+            : top_k;
+        const std::vector<ChunkMatch> matches = trace.searchChunks(query, candidate_k);
+        if (matches.empty()) {
+            std::cout << "No matching chunks found.\n";
+            continue;
+        }
+
+        if (use_laya) {
+            std::vector<LayaMatch> reranked;
+            std::string error;
+            std::cout << "Laya assessing " << matches.size() << " candidates...\n";
+            if (laya.rerank(query, matches, reranked, error)) {
+                std::size_t accepted = 0;
+                for (const LayaMatch& match : reranked) if (match.accepted) ++accepted;
+                std::cout << "Laya accepted " << accepted << '/' << reranked.size()
+                          << " candidates as relevant.\n";
+                if (accepted == 0) {
+                    std::cout << "No chunks passed Laya's relevance filter.\n";
+                    continue;
+                }
+                std::size_t rank = 0;
+                for (const LayaMatch& match : reranked) {
+                    if (!match.accepted) continue;
+                    print_match(match.match, ++rank, &match);
+                    if (rank == top_k) break;
+                }
+                continue;
+            }
+            std::cerr << "Warning: could not reach Laya at " << laya_url
+                      << " (" << error << "). Showing vector results without reranking.\n";
+        }
+
+        for (std::size_t i = 0; i < std::min(top_k, matches.size()); ++i) {
+            print_match(matches[i], i + 1);
+        }
+    }
+    std::cout << "Leaving interactive search.\n";
+}
+
+2. main.cc:75-131  score=0.0308  cosine=0.2046  commit=0674f66369180839f1a13e6878b2d9dfdd8f9cdc
+void run_query_prompt(GitTrace& trace, std::size_t top_k,
+                      bool use_laya, const std::string& laya_url)
+{
+    std::cout << "\nInteractive chunk search (enter :q to quit, :help for help).\n";
+    if (use_laya) std::cout << "Relevance reranker: " << laya_url << '\n';
+    LayaClient laya(laya_url);
+    std::string query;
+    while (true) {
+        std::cout << "query> " << std::flush;
+        if (!std::getline(std::cin, query)) break;
+        if (query == ":q" || query == ":quit" || query == "exit") break;
+        if (query == ":help") {
+            std::cout << "Type a natural-language or code query. Use :q to quit.\n";
+            continue;
+        }
+        if (query.empty()) continue;
+
+        const std::size_t candidate_k = use_laya
+            ? (top_k >= 16 ? 32 : top_k * 2)
+            : top_k;
+        const std::vector<ChunkMatch> matches = trace.searchChunks(query, candidate_k);
+        if (matches.empty()) {
+            std::cout << "No matching chunks found.\n";
+            continue;
+        }
+
+        if (use_laya) {
+            std::vector<LayaMatch> reranked;
+            std::string error;
+            std::cout << "Reranker assessing " << matches.size() << " candidates...\n";
+            if (laya.rerank(query, matches, reranked, error)) {
+                std::size_t accepted = 0;
+                for (const LayaMatch& match : reranked) if (match.accepted) ++accepted;
+                std::cout << "Reranker accepted " << accepted << '/' << reranked.size()
+                          << " candidates as relevant.\n";
+                if (accepted == 0) {
+                    std::cout << "No chunks passed the relevance filter.\n";
+                    continue;
+                }
+                std::size_t rank = 0;
+                for (const LayaMatch& match : reranked) {
+                    if (!match.accepted) continue;
+                    print_match(match.match, ++rank, &match);
+                    if (rank == top_k) break;
+                }
+                continue;
+            }
+            std::cerr << "Warning: could not reach the reranker at " << laya_url
+                      << " (" << error << "). Showing vector results without reranking.\n";
+        }
+
+        for (std::size_t i = 0; i < std::min(top_k, matches.size()); ++i) {
+            print_match(matches[i], i + 1);
+        }
+    }
+    std::cout << "Leaving interactive search.\n";
+}
+
+3. main.cc:129-182  score=0.0304  cosine=0.1911  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+void run_query_prompt(GitTrace& trace, std::size_t top_k,
+                      bool use_laya, const std::string& laya_url)
+{
+    LayaClient laya(laya_url);
+    std::string query;
+    while (true) {
+        std::cout << "query> " << std::flush;
+        if (!std::getline(std::cin, query)) break;
+        if (query == ":q" || query == ":quit" || query == "exit") break;
+        if (query == ":help") {
+            std::cout << "Type a natural-language or code query. Use :q to quit.\n";
+            continue;
+        }
+        if (query.empty()) continue;
+
+        const std::size_t candidate_k = use_laya
+            ? (top_k >= 16 ? 32 : top_k * 2)
+            : top_k;
+        const std::vector<ChunkMatch> matches = trace.searchChunks(query, candidate_k);
+        if (matches.empty()) {
+            std::cout << "No matching chunks found.\n";
+            continue;
+        }
+
+        if (use_laya) {
+            std::vector<LayaMatch> reranked;
+            std::string error;
+            std::cout << "Reranker assessing " << matches.size() << " candidates...\n";
+            if (laya.rerank(query, matches, reranked, error)) {
+                std::size_t accepted = 0;
+                for (const LayaMatch& match : reranked) if (match.accepted) ++accepted;
+                std::cout << "Reranker accepted " << accepted << '/' << reranked.size()
+                          << " candidates as relevant.\n";
+                if (accepted == 0) {
+                    std::cout << "No chunks passed the relevance filter.\n";
+                    continue;
+                }
+                std::size_t rank = 0;
+                for (const LayaMatch& match : reranked) {
+                    if (!match.accepted) continue;
+                    print_match(match.match, ++rank, &match);
+                    if (rank == top_k) break;
+                }
+                continue;
+            }
+            std::cerr << "Warning: could not reach the reranker at " << laya_url
+                      << " (" << error << "). Showing vector results without reranking.\n";
+        }
+
+        for (std::size_t i = 0; i < std::min(top_k, matches.size()); ++i) {
+            print_match(matches[i], i + 1);
+        }
+    }
+}
+
+4. main.cc:16-32  score=0.0301  cosine=0.2079  commit=7c1352366b18c9a85aa07e624cffa11e43b1cd1b
+void print_usage(const char* program)
+{
+    std::cout << "Usage: " << program << " [options] [repository-path]\n"
+              << "\nOptions:\n"
+              << "  -r, --repo PATH      Repository to scan (default: current directory)\n"
+              << "      --no-embeddings  Skip model loading and embedding generation\n"
+              << "      --list           Print each unique file version found\n"
+              << "      --top-k N        Number of similar chunks per query (default: 5)\n"
+              << "      --laya-url URL   Laya reranker URL (default: http://127.0.0.1:8787/rerank)\n"
+              << "      --no-laya        Show vector results without Laya reranking\n"
+              << "      --no-interactive  Finish after indexing without starting the query prompt\n"
+              << "  -h, --help           Show this help\n"
+              << "\nExamples:\n"
+              << "  " << program << " --repo /path/to/project --top-k 8\n"
+              << "  " << program << " --repo /path/to/project --no-embeddings --list\n"
+              << "  " << program << " /path/to/project\n";
+}
+
+5. test.cpp:25-122  score=0.0296  cosine=0.1647  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+int main()
+{
+    const fs::path root = fs::temp_directory_path() / "gittrace-retrieval-test";
+    const fs::path repo = root / "repo";
+    std::error_code ec;
+    fs::remove_all(root, ec);
+    fs::create_directories(repo, ec);
+    if (ec) {
+        std::cerr << "Could not create test repository: " << ec.message() << '\n';
+        return 1;
+    }
+
+    const std::string prefix = "git -C \"" + repo.string() + "\" ";
+    const std::vector<std::string> setup = {
+        prefix + "init -q",
+        prefix + "config user.name \"GitTrace Test\"",
+        prefix + "config user.email \"gittrace-test@example.invalid\""
+    };
+    for (const auto& command : setup) {
+        if (!run(command)) {
+            std::cerr << "Failed to initialize test Git repository\n";
+            fs::remove_all(root, ec);
+            return 1;
+        }
+    }
+
+    if (!writeFile(repo / "alpha.txt", "alpha version one\n") ||
+        !writeFile(repo / "unchanged.txt", "kept across commits\n") ||
+        !run(prefix + "add .") || !run(prefix + "commit -q -m first") ||
+        !writeFile(repo / "alpha.txt", "alpha version two\n") ||
+        !writeFile(repo / "beta.txt", "new file in second commit\n") ||
+        !run(prefix + "add .") || !run(prefix + "commit -q -m second")) {
+        std::cerr << "Failed to create test history\n";
+        fs::remove_all(root, ec);
+        return 1;
+    }
+
+    GitTrace trace;
+    if (!trace.init(repo.string().c_str(), false)) {
+        std::cerr << "GitTrace could not open the test repository\n";
+        fs::remove_all(root, ec);
+        return 1;
+    }
+    trace.beginGitTrace();
+
+    std::map<std::string, std::string> expected = {
+        {"alpha.txt|alpha version one\n", "first"},
+        {"alpha.txt|alpha version two\n", "second"},
+        {"beta.txt|new file in second commit\n", "second"},
+        {"unchanged.txt|kept across commits\n", "second"}
+    };
+    if (trace.blobs.size() != expected.size()) {
+        std::cerr << "Expected " << expected.size() << " unique text blobs, got "
+                  << trace.blobs.size() << '\n';
+        fs::remove_all(root, ec);
+        return 1;
+    }
+
+    for (const Blob& blob : trace.blobs) {
+        const std::string key = blob.filepath + "|" +
+            std::string(blob.raw_data.begin(), blob.raw_data.end());
+        const auto found = expected.find(key);
+        if (found == expected.end()) {
+            std::cerr << "Unexpected or corrupted blob retrieved: " << blob.filepath << '\n';
+            fs::remove_all(root, ec);
+            return 1;
+        }
+        const std::string revision_command = prefix + "log -1 --format=%s " + blob.sha;
+        const std::string output_path = (root / "subject.txt").string();
+        if (!run(revision_command + " > \"" + output_path + "\"")) {
+            std::cerr << "Could not resolve commit metadata for " << blob.filepath << '\n';
+            fs::remove_all(root, ec);
+            return 1;
+        }
+        std::ifstream subject_file(output_path);
+        std::string subject;
+        std::getline(subject_file, subject);
+        if (subject != found->second || blob.author_name != "GitTrace Test" ||
+            blob.author_email != "gittrace-test@example.invalid" || blob.time_mod <= 0) {
+            std::cerr << "Incorrect commit metadata for " << blob.filepath << '\n';
+            fs::remove_all(root, ec);
+            return 1;
+        }
+        std::cout << "Retrieved " << blob.filepath << " from '" << subject
+                  << "' by " << blob.author_name << ": "
+                  << std::string(blob.raw_data.begin(), blob.raw_data.end());
+        expected.erase(found);
+    }
+
+    fs::remove_all(root, ec);
+    if (!expected.empty()) {
+        std::cerr << "Some expected historical blobs were not retrieved\n";
+        return 1;
+    }
+    std::cout << "GitTrace retrieval test passed (" << trace.blobs.size()
+              << " unique historical blobs).\n";
+    return 0;
+}
+
+6. main.cc:16-32  score=0.0290  cosine=0.1844  commit=0674f66369180839f1a13e6878b2d9dfdd8f9cdc
+void print_usage(const char* program)
+{
+    std::cout << "Usage: " << program << " [options] [repository-path]\n"
+              << "\nOptions:\n"
+              << "  -r, --repo PATH      Repository to scan (default: current directory)\n"
+              << "      --no-embeddings  Skip model loading and embedding generation\n"
+              << "      --list           Print each unique file version found\n"
+              << "      --top-k N        Number of similar chunks per query (default: 5)\n"
+              << "      --laya-url URL   Laya reranker URL (default: http://127.0.0.1:8787/rerank)\n"
+              << "      --no-laya        Show vector results without Laya reranking\n"
+              << "      --no-interactive  Finish after indexing without starting the query prompt\n"
+              << "  -h, --help           Show this help\n"
+              << "\nExamples:\n"
+              << "  " << program << " --repo /path/to/project --top-k 8\n"
+              << "  " << program << " --repo /path/to/project --no-embeddings --list\n"
+              << "  " << program << " /path/to/project\n";
+}
+
+7. main.cc:70-86  score=0.0282  cosine=0.1636  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+void print_usage(const char* program)
+{
+    std::cout << "Usage: " << program << " [options] [repository-path]\n"
+              << "\nOptions:\n"
+              << "  -r, --repo PATH      Repository to scan (default: current directory)\n"
+              << "      --no-embeddings  Skip model loading and embedding generation\n"
+              << "      --list           Print each unique file version found\n"
+              << "      --top-k N        Number of similar chunks per query (default: 5)\n"
+              << "      --laya-url URL   Laya reranker URL (default: http://127.0.0.1:8787/rerank)\n"
+              << "      --no-laya        Show vector results without Laya reranking\n"
+              << "      --no-interactive  Finish after indexing without starting the query prompt\n"
+              << "  -h, --help           Show this help\n"
+              << "\nExamples:\n"
+              << "  " << program << " --repo /path/to/project --top-k 8\n"
+              << "  " << program << " --repo /path/to/project --no-embeddings --list\n"
+              << "  " << program << " /path/to/project\n";
+}
+
+8. GitTrace/utils/treesitter.cpp:199-314  score=0.0278  cosine=0.1859  commit=9d755e01956de1d5d8491876715b05d0f719bef5
+bool TreeSitter::install_and_load(const GrammarSpec& spec)
+{
+    if (grammars_.find(spec.key) != grammars_.end()) return true;
+
+    const std::string name = repo_name(spec.url);
+    if (name.empty() || name == "." || name == ".." ||
+        spec.source_subdir.find("..") != std::string::npos || fs::path(spec.source_subdir).is_absolute()) {
+        std::cerr << "Invalid grammar repository name or source subdirectory\n";
+        return false;
+    }
+    const fs::path grammar_root = fs::path(resource_dir_) / "grammars";
+    const fs::path source_dir = grammar_root / name;
+    const fs::path build_dir = grammar_root / ".build" / name /
+        (spec.source_subdir.empty() ? "root" : fs::path(spec.source_subdir));
+    std::error_code ec;
+    fs::create_directories(grammar_root, ec);
+    if (ec) {
+        std::cerr << "Could not create grammar directory " << grammar_root << ": " << ec.message() << '\n';
+        return false;
+    }
+
+    if (!fs::exists(source_dir / ".git")) {
+        if (fs::exists(source_dir)) fs::remove_all(source_dir, ec);
+        git_repository* cloned = nullptr;
+        const int result = git_clone(&cloned, spec.url.c_str(), source_dir.string().c_str(), nullptr);
+        if (cloned) git_repository_free(cloned);
+        if (result < 0) {
+            const git_error* error = git_error_last();
+            std::cerr << "Could not clone grammar " << spec.url << ": "
+                      << (error ? error->message : "unknown libgit2 error") << '\n';
+            return false;
+        }
+    }
+
+    const fs::path grammar_source_dir = spec.source_subdir.empty()
+        ? source_dir : source_dir / spec.source_subdir;
+    if (!fs::exists(grammar_source_dir / "src" / "parser.c")) {
+        std::cerr << "Grammar source has no src/parser.c: " << grammar_source_dir << '\n';
+        return false;
+    }
+
+    fs::create_directories(build_dir, ec);
+    if (ec) {
+        std::cerr << "Could not create grammar build directory: " << ec.message() << '\n';
+        return false;
+    }
+
+    const fs::path cmake_file = build_dir / "CMakeLists.txt";
+    {
+        std::ofstream cmake(cmake_file, std::ios::trunc);
+        cmake << "cmake_minimum_required(VERSION 3.10)\n"
+                 "project(GitTraceGrammar LANGUAGES C CXX)\n"
+                 "file(GLOB parser_sources \"${GRAMMAR_SOURCE_DIR}/src/parser.c\" \"${GRAMMAR_SOURCE_DIR}/src/scanner.c\" \"${GRAMMAR_SOURCE_DIR}/src/scanner.cc\" \"${GRAMMAR_SOURCE_DIR}/src/scanner.cpp\")\n"
+                 "add_library(gittrace_grammar MODULE ${parser_sources})\n"
+                 "target_include_directories(gittrace_grammar PRIVATE \"${GRAMMAR_SOURCE_DIR}/src\")\n"
+                 "set_target_properties(gittrace_grammar PROPERTIES PREFIX \"\" OUTPUT_NAME \"gittrace_grammar\" LIBRARY_OUTPUT_DIRECTORY \"${OUTPUT_DIR}\" RUNTIME_OUTPUT_DIRECTORY \"${OUTPUT_DIR}\" LIBRARY_OUTPUT_DIRECTORY_RELEASE \"${OUTPUT_DIR}\" RUNTIME_OUTPUT_DIRECTORY_RELEASE \"${OUTPUT_DIR}\" WINDOWS_EXPORT_ALL_SYMBOLS ON)\n";
+        if (!cmake) {
+            std::cerr << "Could not write generated grammar CMakeLists: " << cmake_file << '\n';
+            return false;
+        }
+    }
+
+    const fs::path output_dir = build_dir / "artifacts";
+    fs::create_directories(output_dir, ec);
+    if (ec) return false;
+    const fs::path cmake_build_dir = build_dir / "cmake-build";
+    const std::string configure = "cmake -S " + shell_quote(build_dir.string()) +
+        " -B " + shell_quote(cmake_build_dir.string()) +
+        " -DGRAMMAR_SOURCE_DIR=" + shell_quote(grammar_source_dir.string()) +
+        " -DOUTPUT_DIR=" + shell_quote(output_dir.string());
+    if (std::system(configure.c_str()) != 0) {
+        std::cerr << "CMake configuration failed for grammar " << name << '\n';
+        return false;
+    }
+    const std::string build = "cmake --build " + shell_quote(cmake_build_dir.string()) + " --config Release";
+    if (std::system(build.c_str()) != 0) {
+        std::cerr << "Could not build Tree-sitter grammar " << name << '\n';
+        return false;
+    }
+
+    const fs::path library_path = output_dir / dynamic_library_name();
+    void* library = open_library(library_path);
+    if (!library) {
+#ifndef _WIN32
+        std::cerr << "Could not load grammar library " << library_path << ": " << dlerror() << '\n';
+#else
+        std::cerr << "Could not load grammar library " << library_path << '\n';
+#endif
+        return false;
+    }
+
+    using LanguageFunction = const TSLanguage* (*)();
+    const std::string symbol = spec.symbol.empty() ? language_symbol(name) : spec.symbol;
+    auto function = reinterpret_cast<LanguageFunction>(find_symbol(library, symbol));
+    if (!function) {
+        std::cerr << "Grammar library " << name << " does not export " << symbol << '\n';
+        close_library(library);
+        return false;
+    }
+
+    Grammar grammar;
+    grammar.library = library;
+    grammar.language = function();
+    grammar.parser = ts_parser_new();
+    if (!grammar.language || !grammar.parser ||
+        ts_language_abi_version(grammar.language) > TREE_SITTER_LANGUAGE_VERSION ||
+        ts_language_abi_version(grammar.language) < TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION ||
+        !ts_parser_set_language(grammar.parser, grammar.language)) {
+        std::cerr << "Grammar " << name << " is incompatible with the installed Tree-sitter runtime\n";
+        if (grammar.parser) ts_parser_delete(grammar.parser);
+        close_library(library);
+        return false;
+    }
+    grammars_.emplace(spec.key, grammar);
+    return true;
+}
+
+9. GitTrace/chunkdb/chunkdb.h:10-36  score=0.0274  cosine=0.1633  commit=e2db25d8eb0fc8f3ea9263a531b2e72184eb11ae
+class ChunkDB
+{
+private:
+    std::vector<Chunk> chunks;
+    llama_model_params mparams;
+    llama_context_params cparams;
+    const llama_vocab* vcb = nullptr;
+    llama_context* ctx = nullptr;
+    llama_model* model = nullptr;
+
+    uint32_t curr_seq_id;
+
+    const char* model_path = "GitTrace/chunkdb/embedder/bge-code-v1-q8_0.gguf";
+
+    void chunkify(const std::vector<float>& embedding, const std::string& input);
+    std::vector<llama_token> tokenize(const std::string& input, bool add_special);
+    float cosineSimilarity(const std::vector<float>& v1, const std::vector<float>& v2);
+
+public:
+    ChunkDB();
+    ~ChunkDB();
+
+    bool init();
+    std::vector<float> embed(const std::string& input, bool add_special = true, bool store = true);
+
+    std::vector<Chunk*> getSimilarChunks(const std::vector<float>& embedding, uint8_t k = 3);
+}
+
+10. GitTrace/laya_client.cpp:38-142  score=0.0271  cosine=0.1646  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+bool LayaClient::rerank(const std::string& query,
+                        const std::vector<ChunkMatch>& candidates,
+                        std::vector<LayaMatch>& results,
+                        std::string& error) const
+{
+    results.clear();
+    if (candidates.empty()) return true;
+    if (!initialize_curl(error)) return false;
+
+    json request;
+    request["query"] = query;
+    request["min_relevance"] = "related";
+    request["candidates"] = json::array();
+
+    std::unordered_map<std::string, ChunkMatch> by_id;
+    by_id.reserve(candidates.size());
+    for (const ChunkMatch& candidate : candidates) {
+        if (!candidate.chunk) continue;
+        const Chunk& chunk = *candidate.chunk;
+        const std::string id = std::to_string(chunk.id);
+        by_id.emplace(id, candidate);
+
+        json item = {
+            {"id", id},
+            {"path", chunk.filepath},
+            {"text", chunk.input.substr(0, 12000)},
+            {"similarity", candidate.similarity},
+            {"commit_sha", chunk.commit_sha},
+            {"start_line", chunk.start_line},
+            {"end_line", chunk.end_line}
+        };
+        request["candidates"].push_back(std::move(item));
+    }
+    if (request["candidates"].empty()) return true;
+
+    const std::string payload = request.dump(-1, ' ', false, json::error_handler_t::replace);
+    std::string response;
+    std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> curl(curl_easy_init(), curl_easy_cleanup);
+    if (!curl) {
+        error = "could not create HTTP client";
+        return false;
+    }
+
+    curl_slist* raw_headers = nullptr;
+    raw_headers = curl_slist_append(raw_headers, "Content-Type: application/json");
+    std::unique_ptr<curl_slist, decltype(&curl_slist_free_all)> headers(raw_headers, curl_slist_free_all);
+
+    curl_easy_setopt(curl.get(), CURLOPT_URL, endpoint.c_str());
+    curl_easy_setopt(curl.get(), CURLOPT_HTTPHEADER, headers.get());
+    curl_easy_setopt(curl.get(), CURLOPT_POST, 1L);
+    curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDS, payload.data());
+    curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDSIZE_LARGE, static_cast<curl_off_t>(payload.size()));
+    curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, append_response);
+    curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl.get(), CURLOPT_CONNECTTIMEOUT_MS, 1500L);
+    curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT_MS, 60000L);
+    curl_easy_setopt(curl.get(), CURLOPT_NOSIGNAL, 1L);
+
+    const CURLcode result = curl_easy_perform(curl.get());
+    if (result != CURLE_OK) {
+        error = curl_easy_strerror(result);
+        return false;
+    }
+
+    long status = 0;
+    curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &status);
+    if (status < 200 || status >= 300) {
+        error = "Reranker service returned HTTP " + std::to_string(status);
+        if (!response.empty()) error += ": " + response;
+        return false;
+    }
+
+    try {
+        const json document = json::parse(response);
+        if (!document.contains("results") || !document["results"].is_array()) {
+            error = "Laya response has no results array";
+            return false;
+        }
+
+        results.reserve(document["results"].size());
+        for (const json& item : document["results"]) {
+            const std::string id = item.at("id").get<std::string>();
+            const auto candidate = by_id.find(id);
+            if (candidate == by_id.end()) continue;
+
+            LayaMatch match;
+            match.match = candidate->second;
+            match.relevance = item.value("relevance", std::string("irrelevant"));
+            match.confidence = item.value("confidence", 0.0f);
+            match.accepted = item.value("accepted", false);
+            results.push_back(std::move(match));
+        }
+    } catch (const std::exception& exception) {
+        error = std::string("could not parse Laya response: ") + exception.what();
+        results.clear();
+        return false;
+    }
+
+    if (results.size() != by_id.size()) {
+        error = "Laya response did not include every submitted candidate";
+        results.clear();
+        return false;
+    }
+    return true;
+}
+
+11. GitTrace/utils/treesitter.cpp:199-316  score=0.0258  cosine=0.1629  commit=e2db25d8eb0fc8f3ea9263a531b2e72184eb11ae
+bool TreeSitter::install_and_load(const GrammarSpec& spec)
+{
+    if (grammars_.find(spec.key) != grammars_.end()) return true;
+
+    const std::string name = repo_name(spec.url);
+    if (name.empty() || name == "." || name == ".." ||
+        spec.source_subdir.find("..") != std::string::npos || fs::path(spec.source_subdir).is_absolute()) {
+        std::cerr << "Invalid grammar repository name or source subdirectory\n";
+        return false;
+    }
+    const fs::path grammar_root = fs::path(resource_dir_) / "grammars";
+    const fs::path source_dir = grammar_root / name;
+    const fs::path build_dir = grammar_root / ".build" / name /
+        (spec.source_subdir.empty() ? "root" : fs::path(spec.source_subdir));
+    std::error_code ec;
+    fs::create_directories(grammar_root, ec);
+    if (ec) {
+        std::cerr << "Could not create grammar directory " << grammar_root << ": " << ec.message() << '\n';
+        return false;
+    }
+
+    if (!fs::exists(source_dir / ".git")) {
+        if (fs::exists(source_dir)) fs::remove_all(source_dir, ec);
+        git_repository* cloned = nullptr;
+        const int result = git_clone(&cloned, spec.url.c_str(), source_dir.string().c_str(), nullptr);
+        if (cloned) git_repository_free(cloned);
+        if (result < 0) {
+            const git_error* error = git_error_last();
+            std::cerr << "Could not clone grammar " << spec.url << ": "
+                      << (error ? error->message : "unknown libgit2 error") << '\n';
+            return false;
+        }
+    }
+
+    const fs::path grammar_source_dir = spec.source_subdir.empty()
+        ? source_dir : source_dir / spec.source_subdir;
+    if (!fs::exists(grammar_source_dir / "src" / "parser.c")) {
+        std::cerr << "Grammar source has no src/parser.c: " << grammar_source_dir << '\n';
+        return false;
+    }
+
+    fs::create_directories(build_dir, ec);
+    if (ec) {
+        std::cerr << "Could not create grammar build directory: " << ec.message() << '\n';
+        return false;
+    }
+
+    const fs::path absolute_build_dir = fs::absolute(build_dir);
+    const fs::path absolute_grammar_source_dir = fs::absolute(grammar_source_dir);
+    const fs::path cmake_file = absolute_build_dir / "CMakeLists.txt";
+    {
+        std::ofstream cmake(cmake_file, std::ios::trunc);
+        cmake << "cmake_minimum_required(VERSION 3.10)\n"
+                 "project(GitTraceGrammar LANGUAGES C CXX)\n"
+                 "file(GLOB parser_sources \"${GRAMMAR_SOURCE_DIR}/src/parser.c\" \"${GRAMMAR_SOURCE_DIR}/src/scanner.c\" \"${GRAMMAR_SOURCE_DIR}/src/scanner.cc\" \"${GRAMMAR_SOURCE_DIR}/src/scanner.cpp\")\n"
+                 "add_library(gittrace_grammar MODULE ${parser_sources})\n"
+                 "target_include_directories(gittrace_grammar PRIVATE \"${GRAMMAR_SOURCE_DIR}/src\")\n"
+                 "set_target_properties(gittrace_grammar PROPERTIES PREFIX \"\" OUTPUT_NAME \"gittrace_grammar\" LIBRARY_OUTPUT_DIRECTORY \"${OUTPUT_DIR}\" RUNTIME_OUTPUT_DIRECTORY \"${OUTPUT_DIR}\" LIBRARY_OUTPUT_DIRECTORY_RELEASE \"${OUTPUT_DIR}\" RUNTIME_OUTPUT_DIRECTORY_RELEASE \"${OUTPUT_DIR}\" WINDOWS_EXPORT_ALL_SYMBOLS ON)\n";
+        if (!cmake) {
+            std::cerr << "Could not write generated grammar CMakeLists: " << cmake_file << '\n';
+            return false;
+        }
+    }
+
+    const fs::path output_dir = absolute_build_dir / "artifacts";
+    fs::create_directories(output_dir, ec);
+    if (ec) return false;
+    const fs::path cmake_build_dir = absolute_build_dir / "cmake-build";
+    const std::string configure = "cmake -S " + shell_quote(absolute_build_dir.string()) +
+        " -B " + shell_quote(cmake_build_dir.string()) +
+        " -DGRAMMAR_SOURCE_DIR=" + shell_quote(absolute_grammar_source_dir.string()) +
+        " -DOUTPUT_DIR=" + shell_quote(output_dir.string());
+    if (std::system(configure.c_str()) != 0) {
+        std::cerr << "CMake configuration failed for grammar " << name << '\n';
+        return false;
+    }
+    const std::string build = "cmake --build " + shell_quote(cmake_build_dir.string()) + " --config Release";
+    if (std::system(build.c_str()) != 0) {
+        std::cerr << "Could not build Tree-sitter grammar " << name << '\n';
+        return false;
+    }
+
+    const fs::path library_path = output_dir / dynamic_library_name();
+    void* library = open_library(library_path);
+    if (!library) {
+#ifndef _WIN32
+        std::cerr << "Could not load grammar library " << library_path << ": " << dlerror() << '\n';
+#else
+        std::cerr << "Could not load grammar library " << library_path << '\n';
+#endif
+        return false;
+    }
+
+    using LanguageFunction = const TSLanguage* (*)();
+    const std::string symbol = spec.symbol.empty() ? language_symbol(name) : spec.symbol;
+    auto function = reinterpret_cast<LanguageFunction>(find_symbol(library, symbol));
+    if (!function) {
+        std::cerr << "Grammar library " << name << " does not export " << symbol << '\n';
+        close_library(library);
+        return false;
+    }
+
+    Grammar grammar;
+    grammar.library = library;
+    grammar.language = function();
+    grammar.parser = ts_parser_new();
+    if (!grammar.language || !grammar.parser ||
+        ts_language_abi_version(grammar.language) > TREE_SITTER_LANGUAGE_VERSION ||
+        ts_language_abi_version(grammar.language) < TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION ||
+        !ts_parser_set_language(grammar.parser, grammar.language)) {
+        std::cerr << "Grammar " << name << " is incompatible with the installed Tree-sitter runtime\n";
+        if (grammar.parser) ts_parser_delete(grammar.parser);
+        close_library(library);
+        return false;
+    }
+    grammars_.emplace(spec.key, grammar);
+    return true;
+}
+
+12. GitTrace/chunkdb/chunkdb.h:11-42  score=0.0257  cosine=0.1492  commit=0674f66369180839f1a13e6878b2d9dfdd8f9cdc
+class ChunkDB
+{
+private:
+    std::vector<Chunk> chunks;
+    llama_model_params mparams;
+    llama_context_params cparams;
+    const llama_vocab* vcb = nullptr;
+    llama_context* ctx = nullptr;
+    llama_model* model = nullptr;
+
+    uint32_t curr_seq_id;
+
+    const char* model_path = "GitTrace/chunkdb/embedder/bge-code-v1-q8_0.gguf";
+
+    void chunkify(const std::vector<float>& embedding, const std::string& input,
+                  const std::string& commit_sha, const std::string& filepath,
+                  uint32_t start_line, uint32_t end_line);
+    std::vector<llama_token> tokenize(const std::string& input, bool add_special);
+    float cosineSimilarity(const std::vector<float>& v1, const std::vector<float>& v2);
+
+public:
+    ChunkDB();
+    ~ChunkDB();
+
+    bool init();
+    std::vector<float> embed(const std::string& input, bool add_special = true, bool store = true,
+                             const std::string& commit_sha = {}, const std::string& filepath = {},
+                             uint32_t start_line = 0, uint32_t end_line = 0);
+
+    std::vector<Chunk*> getSimilarChunks(const std::vector<float>& embedding, uint8_t k = 3);
+    std::vector<ChunkMatch> search(const std::string& query, std::size_t k = 5);
+}
+
+13. GitTrace/laya_client.cpp:38-142  score=0.0253  cosine=0.1498  commit=7c1352366b18c9a85aa07e624cffa11e43b1cd1b
+bool LayaClient::rerank(const std::string& query,
+                        const std::vector<ChunkMatch>& candidates,
+                        std::vector<LayaMatch>& results,
+                        std::string& error) const
+{
+    results.clear();
+    if (candidates.empty()) return true;
+    if (!initialize_curl(error)) return false;
+
+    json request;
+    request["query"] = query;
+    request["min_relevance"] = "related";
+    request["candidates"] = json::array();
+
+    std::unordered_map<std::string, ChunkMatch> by_id;
+    by_id.reserve(candidates.size());
+    for (const ChunkMatch& candidate : candidates) {
+        if (!candidate.chunk) continue;
+        const Chunk& chunk = *candidate.chunk;
+        const std::string id = std::to_string(chunk.id);
+        by_id.emplace(id, candidate);
+
+        json item = {
+            {"id", id},
+            {"path", chunk.filepath},
+            {"text", chunk.input.substr(0, 12000)},
+            {"similarity", candidate.similarity},
+            {"commit_sha", chunk.commit_sha},
+            {"start_line", chunk.start_line},
+            {"end_line", chunk.end_line}
+        };
+        request["candidates"].push_back(std::move(item));
+    }
+    if (request["candidates"].empty()) return true;
+
+    const std::string payload = request.dump(-1, ' ', false, json::error_handler_t::replace);
+    std::string response;
+    std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> curl(curl_easy_init(), curl_easy_cleanup);
+    if (!curl) {
+        error = "could not create HTTP client";
+        return false;
+    }
+
+    curl_slist* raw_headers = nullptr;
+    raw_headers = curl_slist_append(raw_headers, "Content-Type: application/json");
+    std::unique_ptr<curl_slist, decltype(&curl_slist_free_all)> headers(raw_headers, curl_slist_free_all);
+
+    curl_easy_setopt(curl.get(), CURLOPT_URL, endpoint.c_str());
+    curl_easy_setopt(curl.get(), CURLOPT_HTTPHEADER, headers.get());
+    curl_easy_setopt(curl.get(), CURLOPT_POST, 1L);
+    curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDS, payload.data());
+    curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDSIZE_LARGE, static_cast<curl_off_t>(payload.size()));
+    curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, append_response);
+    curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl.get(), CURLOPT_CONNECTTIMEOUT_MS, 1500L);
+    curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT_MS, 60000L);
+    curl_easy_setopt(curl.get(), CURLOPT_NOSIGNAL, 1L);
+
+    const CURLcode result = curl_easy_perform(curl.get());
+    if (result != CURLE_OK) {
+        error = curl_easy_strerror(result);
+        return false;
+    }
+
+    long status = 0;
+    curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &status);
+    if (status < 200 || status >= 300) {
+        error = "Laya service returned HTTP " + std::to_string(status);
+        if (!response.empty()) error += ": " + response;
+        return false;
+    }
+
+    try {
+        const json document = json::parse(response);
+        if (!document.contains("results") || !document["results"].is_array()) {
+            error = "Laya response has no results array";
+            return false;
+        }
+
+        results.reserve(document["results"].size());
+        for (const json& item : document["results"]) {
+            const std::string id = item.at("id").get<std::string>();
+            const auto candidate = by_id.find(id);
+            if (candidate == by_id.end()) continue;
+
+            LayaMatch match;
+            match.match = candidate->second;
+            match.relevance = item.value("relevance", std::string("irrelevant"));
+            match.confidence = item.value("confidence", 0.0f);
+            match.accepted = item.value("accepted", false);
+            results.push_back(std::move(match));
+        }
+    } catch (const std::exception& exception) {
+        error = std::string("could not parse Laya response: ") + exception.what();
+        results.clear();
+        return false;
+    }
+
+    if (results.size() != by_id.size()) {
+        error = "Laya response did not include every submitted candidate";
+        results.clear();
+        return false;
+    }
+    return true;
+}
+
+14. GitTrace/utils/treesitter.cpp:199-316  score=0.0245  cosine=0.1445  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+bool TreeSitter::install_and_load(const GrammarSpec& spec)
+{
+    if (grammars_.find(spec.key) != grammars_.end()) return true;
+
+    const std::string name = repo_name(spec.url);
+    if (name.empty() || name == "." || name == ".." ||
+        spec.source_subdir.find("..") != std::string::npos || fs::path(spec.source_subdir).is_absolute()) {
+        std::cerr << "Invalid grammar repository name or source subdirectory\n";
+        return false;
+    }
+    const fs::path grammar_root = fs::path(resource_dir_) / "grammars";
+    const fs::path source_dir = grammar_root / name;
+    const fs::path build_dir = grammar_root / ".build" / name /
+        (spec.source_subdir.empty() ? "root" : fs::path(spec.source_subdir));
+    std::error_code ec;
+    fs::create_directories(grammar_root, ec);
+    if (ec) {
+        std::cerr << "Could not create grammar directory " << grammar_root << ": " << ec.message() << '\n';
+        return false;
+    }
+
+    if (!fs::exists(source_dir / ".git")) {
+        if (fs::exists(source_dir)) fs::remove_all(source_dir, ec);
+        git_repository* cloned = nullptr;
+        const int result = git_clone(&cloned, spec.url.c_str(), source_dir.string().c_str(), nullptr);
+        if (cloned) git_repository_free(cloned);
+        if (result < 0) {
+            const git_error* error = git_error_last();
+            std::cerr << "Could not clone grammar " << spec.url << ": "
+                      << (error ? error->message : "unknown libgit2 error") << '\n';
+            return false;
+        }
+    }
+
+    const fs::path grammar_source_dir = spec.source_subdir.empty()
+        ? source_dir : source_dir / spec.source_subdir;
+    if (!fs::exists(grammar_source_dir / "src" / "parser.c")) {
+        std::cerr << "Grammar source has no src/parser.c: " << grammar_source_dir << '\n';
+        return false;
+    }
+
+    fs::create_directories(build_dir, ec);
+    if (ec) {
+        std::cerr << "Could not create grammar build directory: " << ec.message() << '\n';
+        return false;
+    }
+
+    const fs::path absolute_build_dir = fs::absolute(build_dir);
+    const fs::path absolute_grammar_source_dir = fs::absolute(grammar_source_dir);
+    const fs::path cmake_file = absolute_build_dir / "CMakeLists.txt";
+    {
+        std::ofstream cmake(cmake_file, std::ios::trunc);
+        cmake << "cmake_minimum_required(VERSION 3.10)\n"
+                 "project(GitTraceGrammar LANGUAGES C CXX)\n"
+                 "file(GLOB parser_sources \"${GRAMMAR_SOURCE_DIR}/src/parser.c\" \"${GRAMMAR_SOURCE_DIR}/src/scanner.c\" \"${GRAMMAR_SOURCE_DIR}/src/scanner.cc\" \"${GRAMMAR_SOURCE_DIR}/src/scanner.cpp\")\n"
+                 "add_library(gittrace_grammar MODULE ${parser_sources})\n"
+                 "target_include_directories(gittrace_grammar PRIVATE \"${GRAMMAR_SOURCE_DIR}/src\")\n"
+                 "set_target_properties(gittrace_grammar PROPERTIES PREFIX \"\" OUTPUT_NAME \"gittrace_grammar\" LIBRARY_OUTPUT_DIRECTORY \"${OUTPUT_DIR}\" RUNTIME_OUTPUT_DIRECTORY \"${OUTPUT_DIR}\" LIBRARY_OUTPUT_DIRECTORY_RELEASE \"${OUTPUT_DIR}\" RUNTIME_OUTPUT_DIRECTORY_RELEASE \"${OUTPUT_DIR}\" WINDOWS_EXPORT_ALL_SYMBOLS ON)\n";
+        if (!cmake) {
+            std::cerr << "Could not write generated grammar CMakeLists: " << cmake_file << '\n';
+            return false;
+        }
+    }
+
+    const fs::path output_dir = absolute_build_dir / "artifacts";
+    fs::create_directories(output_dir, ec);
+    if (ec) return false;
+    const fs::path cmake_build_dir = absolute_build_dir / "cmake-build";
+    const std::string configure = "cmake -S " + shell_quote(absolute_build_dir.string()) +
+        " -B " + shell_quote(cmake_build_dir.string()) +
+        " -DGRAMMAR_SOURCE_DIR=" + shell_quote(absolute_grammar_source_dir.string()) +
+        " -DOUTPUT_DIR=" + shell_quote(output_dir.string());
+    if (std::system(configure.c_str()) != 0) {
+        std::cerr << "CMake configuration failed for grammar " << name << '\n';
+        return false;
+    }
+    const std::string build = "cmake --build " + shell_quote(cmake_build_dir.string()) + " --config Release";
+    if (std::system(build.c_str()) != 0) {
+        std::cerr << "Could not build Tree-sitter grammar " << name << '\n';
+        return false;
+    }
+
+    const fs::path library_path = output_dir / dynamic_library_name();
+    void* library = open_library(library_path);
+    if (!library) {
+#ifndef _WIN32
+        std::cerr << "Could not load grammar library " << library_path << ": " << dlerror() << '\n';
+#else
+        std::cerr << "Could not load grammar library " << library_path << '\n';
+#endif
+        return false;
+    }
+
+    using LanguageFunction = const TSLanguage* (*)();
+    const std::string symbol = spec.symbol.empty() ? language_symbol(name) : spec.symbol;
+    auto function = reinterpret_cast<LanguageFunction>(find_symbol(library, symbol));
+    if (!function) {
+        std::cerr << "Grammar library " << name << " does not export " << symbol << '\n';
+        close_library(library);
+        return false;
+    }
+
+    Grammar grammar;
+    grammar.library = library;
+    grammar.language = function();
+    grammar.parser = ts_parser_new();
+    if (!grammar.language || !grammar.parser ||
+        ts_language_abi_version(grammar.language) > TREE_SITTER_LANGUAGE_VERSION ||
+        ts_language_abi_version(grammar.language) < TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION ||
+        !ts_parser_set_language(grammar.parser, grammar.language)) {
+        std::cerr << "Grammar " << name << " is incompatible with the installed Tree-sitter runtime\n";
+        if (grammar.parser) ts_parser_delete(grammar.parser);
+        close_library(library);
+        return false;
+    }
+    grammars_.emplace(spec.key, grammar);
+    return true;
+}
+
+15. GitTrace/chunkdb/chunkdb.h:11-48  score=0.0241  cosine=0.1353  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+class ChunkDB
+{
+private:
+    std::vector<Chunk> chunks;
+    llama_model_params mparams;
+    llama_context_params cparams;
+    const llama_vocab* vcb = nullptr;
+    llama_context* ctx = nullptr;
+    llama_model* model = nullptr;
+
+    uint32_t curr_seq_id;
+
+    const char* model_path = "GitTrace/chunkdb/embedder/bge-code-v1-q8_0.gguf";
+
+    void chunkify(const std::vector<float>& embedding, const std::string& input,
+                  const std::string& commit_sha, const std::string& filepath,
+                  uint32_t start_line, uint32_t end_line, int64_t commit_time,
+                  const std::string& syntax_type, uint32_t lineage_depth,
+                  uint32_t syntax_ordinal);
+    void inferLineages();
+    std::vector<llama_token> tokenize(const std::string& input, bool add_special);
+    float cosineSimilarity(const std::vector<float>& v1, const std::vector<float>& v2);
+
+public:
+    ChunkDB();
+    ~ChunkDB();
+
+    bool init();
+    std::vector<float> embed(const std::string& input, bool add_special = true, bool store = true,
+                             const std::string& commit_sha = {}, const std::string& filepath = {},
+                             uint32_t start_line = 0, uint32_t end_line = 0,
+                             int64_t commit_time = 0, const std::string& syntax_type = {},
+                             uint32_t lineage_depth = 0, uint32_t syntax_ordinal = 0);
+    void alignHistoricalChunks();
+
+    std::vector<Chunk*> getSimilarChunks(const std::vector<float>& embedding, uint8_t k = 3);
+    std::vector<ChunkMatch> search(const std::string& query, std::size_t k = 5);
+}
+
+16. main.cc:134-238  score=0.0164  cosine=0.2440  commit=7c1352366b18c9a85aa07e624cffa11e43b1cd1b
+int main(int argc, char* argv[])
+{
+    std::string repository_path = ".";
+    bool repo_was_set = false;
+    bool embeddings_enabled = true;
+    bool list_blobs = false;
+    bool interactive_enabled = true;
+    bool use_laya = true;
+    std::size_t top_k = 5;
+    const char* configured_laya_url = std::getenv("GITTRACE_LAYA_URL");
+    std::string laya_url = configured_laya_url && *configured_laya_url
+        ? configured_laya_url : "http://127.0.0.1:8787/rerank";
+
+    for (int i = 1; i < argc; ++i) {
+        const std::string arg = argv[i];
+        if (arg == "-h" || arg == "--help") {
+            print_usage(argv[0]);
+            return 0;
+        }
+        if (arg == "-r" || arg == "--repo") {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: " << arg << " requires a repository path.\n";
+                print_usage(argv[0]);
+                return 2;
+            }
+            if (repo_was_set) {
+                std::cerr << "Error: repository path was specified more than once.\n";
+                return 2;
+            }
+            repository_path = argv[++i];
+            repo_was_set = true;
+            continue;
+        }
+        if (arg == "--no-embeddings") {
+            embeddings_enabled = false;
+            continue;
+        }
+        if (arg == "--list") {
+            list_blobs = true;
+            continue;
+        }
+        if (arg == "--no-interactive") {
+            interactive_enabled = false;
+            continue;
+        }
+        if (arg == "--no-laya") {
+            use_laya = false;
+            continue;
+        }
+        if (arg == "--laya-url") {
+            if (i + 1 >= argc || argv[i + 1][0] == '\0') {
+                std::cerr << "Error: --laya-url requires a URL.\n";
+                return 2;
+            }
+            laya_url = argv[++i];
+            continue;
+        }
+        if (arg == "--top-k") {
+            if (i + 1 >= argc || !parse_top_k(argv[i + 1], top_k)) {
+                std::cerr << "Error: --top-k requires a positive integer.\n";
+                return 2;
+            }
+            ++i;
+            continue;
+        }
+        if (!arg.empty() && arg[0] == '-') {
+            std::cerr << "Error: unknown option: " << arg << '\n';
+            print_usage(argv[0]);
+            return 2;
+        }
+        if (repo_was_set) {
+            std::cerr << "Error: use either --repo PATH or a positional repository path, not both.\n";
+            return 2;
+        }
+        repository_path = arg;
+        repo_was_set = true;
+    }
+
+    const std::filesystem::path normalized_path = std::filesystem::absolute(repository_path);
+    std::cout << "Opening repository: " << normalized_path.string() << '\n';
+
+    GitTrace trace;
+    if (!trace.init(normalized_path.string().c_str(), embeddings_enabled)) {
+        std::cerr << "Failed to initialize GitTrace. Check the repository path";
+        if (embeddings_enabled) std::cerr << " and embedding model configuration";
+        std::cerr << ".\n";
+        return 1;
+    }
+
+    std::cout << "Reading Git history and parsing supported files...\n";
+    trace.beginGitTrace();
+
+    if (list_blobs) {
+        std::cout << "\nUnique historical file versions:\n";
+        for (const Blob& blob : trace.blobs) print_blob(blob);
+    }
+    std::cout << "GitTrace finished. Collected " << trace.blobs.size()
+              << " unique text blob version(s).";
+    if (!embeddings_enabled) std::cout << " Embeddings were skipped.";
+    std::cout << '\n';
+    if (embeddings_enabled && interactive_enabled) {
+        run_query_prompt(trace, top_k, use_laya, laya_url);
+    }
+    return 0;
+}
+
+17. main.cc:134-238  score=0.0159  cosine=0.2164  commit=0674f66369180839f1a13e6878b2d9dfdd8f9cdc
+int main(int argc, char* argv[])
+{
+    std::string repository_path = ".";
+    bool repo_was_set = false;
+    bool embeddings_enabled = true;
+    bool list_blobs = false;
+    bool interactive_enabled = true;
+    bool use_laya = true;
+    std::size_t top_k = 5;
+    const char* configured_laya_url = std::getenv("GITTRACE_LAYA_URL");
+    std::string laya_url = configured_laya_url && *configured_laya_url
+        ? configured_laya_url : "http://127.0.0.1:8787/rerank";
+
+    for (int i = 1; i < argc; ++i) {
+        const std::string arg = argv[i];
+        if (arg == "-h" || arg == "--help") {
+            print_usage(argv[0]);
+            return 0;
+        }
+        if (arg == "-r" || arg == "--repo") {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: " << arg << " requires a repository path.\n";
+                print_usage(argv[0]);
+                return 2;
+            }
+            if (repo_was_set) {
+                std::cerr << "Error: repository path was specified more than once.\n";
+                return 2;
+            }
+            repository_path = argv[++i];
+            repo_was_set = true;
+            continue;
+        }
+        if (arg == "--no-embeddings") {
+            embeddings_enabled = false;
+            continue;
+        }
+        if (arg == "--list") {
+            list_blobs = true;
+            continue;
+        }
+        if (arg == "--no-interactive") {
+            interactive_enabled = false;
+            continue;
+        }
+        if (arg == "--no-laya") {
+            use_laya = false;
+            continue;
+        }
+        if (arg == "--laya-url") {
+            if (i + 1 >= argc || argv[i + 1][0] == '\0') {
+                std::cerr << "Error: --laya-url requires a URL.\n";
+                return 2;
+            }
+            laya_url = argv[++i];
+            continue;
+        }
+        if (arg == "--top-k") {
+            if (i + 1 >= argc || !parse_top_k(argv[i + 1], top_k)) {
+                std::cerr << "Error: --top-k requires a positive integer.\n";
+                return 2;
+            }
+            ++i;
+            continue;
+        }
+        if (!arg.empty() && arg[0] == '-') {
+            std::cerr << "Error: unknown option: " << arg << '\n';
+            print_usage(argv[0]);
+            return 2;
+        }
+        if (repo_was_set) {
+            std::cerr << "Error: use either --repo PATH or a positional repository path, not both.\n";
+            return 2;
+        }
+        repository_path = arg;
+        repo_was_set = true;
+    }
+
+    const std::filesystem::path normalized_path = std::filesystem::absolute(repository_path);
+    std::cout << "Opening repository: " << normalized_path.string() << '\n';
+
+    GitTrace trace;
+    if (!trace.init(normalized_path.string().c_str(), embeddings_enabled)) {
+        std::cerr << "Failed to initialize GitTrace. Check the repository path";
+        if (embeddings_enabled) std::cerr << " and embedding model configuration";
+        std::cerr << ".\n";
+        return 1;
+    }
+
+    std::cout << "Reading Git history and parsing supported files...\n";
+    trace.beginGitTrace();
+
+    if (list_blobs) {
+        std::cout << "\nUnique historical file versions:\n";
+        for (const Blob& blob : trace.blobs) print_blob(blob);
+    }
+    std::cout << "GitTrace finished. Collected " << trace.blobs.size()
+              << " unique text blob version(s).";
+    if (!embeddings_enabled) std::cout << " Embeddings were skipped.";
+    std::cout << '\n';
+    if (embeddings_enabled && interactive_enabled) {
+        run_query_prompt(trace, top_k, use_laya, laya_url);
+    }
+    return 0;
+}
+
+18. .gitignore:1-4  score=0.0156  cosine=0.2156  commit=f2d7368b61b94adf3f9b7d7fd07896133cb71459
+llama.cpp/
+GitTrace/chunkdb/embedder/
+build/
+.vscode/
+
+19. .gitignore:1-5  score=0.0154  cosine=0.2104  commit=e2db25d8eb0fc8f3ea9263a531b2e72184eb11ae
+llama.cpp/
+GitTrace/chunkdb/embedder/
+GitTrace/rsc/grammars/
+build/
+.vscode/
+
+20. GitTrace/laya_client.h:17-29  score=0.0147  cosine=0.2035  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+class LayaClient
+{
+private:
+    std::string endpoint;
+
+public:
+    explicit LayaClient(std::string endpoint);
+
+    bool rerank(const std::string& query,
+                const std::vector<ChunkMatch>& candidates,
+                std::vector<LayaMatch>& results,
+                std::string& error) const;
+}
+
+21. main.cc:185-299  score=0.0145  cosine=0.1926  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+int main(int argc, char* argv[])
+{
+    std::string repository_path = ".";
+    bool repo_was_set = false;
+    bool embeddings_enabled = true;
+    bool list_blobs = false;
+    bool interactive_enabled = true;
+    bool use_laya = true;
+    std::size_t top_k = 5;
+    const char* configured_laya_url = std::getenv("GITTRACE_LAYA_URL");
+    std::string laya_url = configured_laya_url && *configured_laya_url
+        ? configured_laya_url : "http://127.0.0.1:8787/rerank";
+
+    for (int i = 1; i < argc; ++i) {
+        const std::string arg = argv[i];
+        if (arg == "-h" || arg == "--help") {
+            print_usage(argv[0]);
+            return 0;
+        }
+        if (arg == "-r" || arg == "--repo") {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: " << arg << " requires a repository path.\n";
+                print_usage(argv[0]);
+                return 2;
+            }
+            if (repo_was_set) {
+                std::cerr << "Error: repository path was specified more than once.\n";
+                return 2;
+            }
+            repository_path = argv[++i];
+            repo_was_set = true;
+            continue;
+        }
+        if (arg == "--no-embeddings") {
+            embeddings_enabled = false;
+            continue;
+        }
+        if (arg == "--list") {
+            list_blobs = true;
+            continue;
+        }
+        if (arg == "--no-interactive") {
+            interactive_enabled = false;
+            continue;
+        }
+        if (arg == "--no-laya") {
+            use_laya = false;
+            continue;
+        }
+        if (arg == "--laya-url") {
+            if (i + 1 >= argc || argv[i + 1][0] == '\0') {
+                std::cerr << "Error: --laya-url requires a URL.\n";
+                return 2;
+            }
+            laya_url = argv[++i];
+            continue;
+        }
+        if (arg == "--top-k") {
+            if (i + 1 >= argc || !parse_top_k(argv[i + 1], top_k)) {
+                std::cerr << "Error: --top-k requires a positive integer.\n";
+                return 2;
+            }
+            ++i;
+            continue;
+        }
+        if (!arg.empty() && arg[0] == '-') {
+            std::cerr << "Error: unknown option: " << arg << '\n';
+            print_usage(argv[0]);
+            return 2;
+        }
+        if (repo_was_set) {
+            std::cerr << "Error: use either --repo PATH or a positional repository path, not both.\n";
+            return 2;
+        }
+        repository_path = arg;
+        repo_was_set = true;
+    }
+
+    const std::filesystem::path normalized_path = std::filesystem::absolute(repository_path);
+    std::cout << "Loading...\n" << std::flush;
+    if (!redirect_startup_output()) {
+        std::cerr << "Could not open dev.log for writing.\n";
+        return 1;
+    }
+    std::cout << "Opening repository: " << normalized_path.string() << '\n';
+
+    GitTrace trace;
+    if (!trace.init(normalized_path.string().c_str(), embeddings_enabled)) {
+        std::cerr << "Failed to initialize GitTrace. Check the repository path";
+        if (embeddings_enabled) std::cerr << " and embedding model configuration";
+        std::cerr << ".\n";
+        restore_console_output();
+        std::cout << "Initialization failed; see dev.log.\n";
+        return 1;
+    }
+
+    std::cout << "Reading Git history and parsing supported files...\n";
+    trace.beginGitTrace();
+
+    if (list_blobs) {
+        std::cout << "\nUnique historical file versions:\n";
+        for (const Blob& blob : trace.blobs) print_blob(blob);
+    }
+    std::cout << "GitTrace finished. Collected " << trace.blobs.size()
+              << " unique text blob version(s).";
+    if (!embeddings_enabled) std::cout << " Embeddings were skipped.";
+    std::cout << '\n';
+    restore_console_output();
+    if (embeddings_enabled && interactive_enabled) {
+        run_query_prompt(trace, top_k, use_laya, laya_url);
+    } else {
+        std::cout << "Loading complete. See dev.log for details.\n";
+    }
+    return 0;
+}
+
+22. .gitignore:1-6  score=0.0137  cosine=0.1842  commit=0674f66369180839f1a13e6878b2d9dfdd8f9cdc
+llama.cpp/
+GitTrace/chunkdb/embedder/
+GitTrace/rsc/grammars/
+build/
+.vscode/
+.vgittrace/
+
+23. main.cc:5-30  score=0.0135  cosine=0.1786  commit=e2db25d8eb0fc8f3ea9263a531b2e72184eb11ae
+int main(int argc, char* argv[])
+{
+    if (argc > 2)
+    {
+        std::cerr << "Usage: " << argv[0] << " [repository-path]\n";
+        return 2;
+    }
+
+    const char* repositoryPath = argc == 2 ? argv[1] : ".";
+
+    GitTrace trace;
+    std::cout << "Opening repository: " << repositoryPath << '\n';
+    if (!trace.init(repositoryPath, true))
+    {
+        std::cerr << "Failed to initialize GitTrace. Check the repository path "
+                     "and embedding model configuration.\n";
+        return 1;
+    }
+
+    std::cout << "Reading Git history and parsing supported files...\n";
+    trace.beginGitTrace();
+
+    std::cout << "GitTrace finished. Collected " << trace.blobs.size()
+              << " unique text blob version(s).\n";
+    return 0;
+}
+
+24. GitTrace/gittrace.cpp:50-178  score=0.0133  cosine=0.1651  commit=9d755e01956de1d5d8491876715b05d0f719bef5
+void GitTrace::beginGitTrace()
+{
+    if (!repo) {
+        std::cerr << "Cannot read commits before initializing GitTrace\n";
+        return;
+    }
+
+    git_revwalk* walker = nullptr;
+    if (git_revwalk_new(&walker, repo) < 0) {
+        std::cerr << "Could not create commit walker\n";
+        return;
+    }
+    git_revwalk_push_head(walker);
+    std::set<std::string> extensions;
+
+    git_oid oid;
+    std::unordered_set<std::string> seen_blobs;
+    while(git_revwalk_next(&oid, walker) == 0)
+    {
+        git_commit* commit = nullptr;
+        if(git_commit_lookup(&commit, repo, &oid) < 0) continue;
+
+        // SHA
+        char sha[41] = {0};
+        git_oid_tostr(sha, sizeof(sha), &oid);
+
+        // Mod and Author info
+        git_time_t commit_time = git_commit_time(commit);
+        const git_signature* auth = git_commit_author(commit);
+
+        git_tree* tree = nullptr;
+        if(git_commit_tree(&tree, commit) == 0)
+        {
+            struct Context
+            {
+                git_repository* repo;
+                std::string curr_sha, a_name, a_email;
+                int64_t timestamp;
+                std::vector<Blob>* res;
+                std::unordered_set<std::string>* processed_blobs; 
+                std::set<std::string>* extensions;
+            };
+
+            Context context {repo, sha, auth->name, auth->email, static_cast<int64_t>(commit_time), &blobs, &seen_blobs, &extensions};
+
+            auto tree_recursive = [](const char* root, const git_tree_entry* entry, void* payload) -> int 
+            {
+                if(git_tree_entry_type(entry) != GIT_OBJECT_BLOB)
+                {
+                    return 0;
+                }
+
+                Context* wcontext = static_cast<Context*>(payload);
+                
+                // Generate the string representation of the current blob's OID
+                const git_oid* entry_oid = git_tree_entry_id(entry);
+                char blob_sha[41] = {0};
+                git_oid_tostr(blob_sha, sizeof(blob_sha), entry_oid);
+                std::string blob_hash(blob_sha);
+
+                // Skip this file if we have already processed this exact byte-for-byte state
+                if (wcontext->processed_blobs->find(blob_hash) != wcontext->processed_blobs->end()) 
+                {
+                    return 0; 
+                }
+                wcontext->processed_blobs->insert(blob_hash);
+
+                git_blob* blob = nullptr;
+                if(git_blob_lookup(&blob, wcontext->repo, entry_oid) == 0)
+                {
+                    if(!git_blob_is_binary(blob))
+                    {
+                        Blob b;
+                        b.sha = wcontext->curr_sha;
+                        b.filepath = std::string(root) + git_tree_entry_name(entry);
+                        b.time_mod = wcontext->timestamp;
+                        b.author_name = wcontext->a_name;
+                        b.author_email = wcontext->a_email;
+
+                        const unsigned char* content = static_cast<const unsigned char*>(git_blob_rawcontent(blob));
+                        git_object_size_t size = git_blob_rawsize(blob);
+                        b.raw_data.assign(content, content + size);
+
+                        const auto dot = b.filepath.find_last_of('.');
+                        const auto slash = b.filepath.find_last_of("/\\");
+                        if (dot != std::string::npos && dot + 1 < b.filepath.size() &&
+                            (slash == std::string::npos || dot > slash) && dot > (slash == std::string::npos ? 0 : slash + 1)) {
+                            std::string extension = b.filepath.substr(dot + 1);
+                            std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) {
+                                return static_cast<char>(std::tolower(c));
+                            });
+                            wcontext->extensions->insert(std::move(extension));
+                        }
+
+                        wcontext->res->push_back(std::move(b));
+                    }
+
+                    git_blob_free(blob);
+                }
+
+                return 0;
+            };
+
+            git_tree_walk(tree, GIT_TREEWALK_PRE, tree_recursive, &context);
+            git_tree_free(tree);
+        }
+        git_commit_free(commit);
+    }
+    git_revwalk_free(walker);
+
+    std::vector<std::string> extension_list(extensions.begin(), extensions.end());
+    TreeSitter tree_sitter("GitTrace/rsc");
+    const bool prepared = tree_sitter.prepare(extension_list);
+    size_t parsed = 0;
+    size_t failed = 0;
+    for (const auto& blob : blobs) {
+        if (tree_sitter.parse(blob.filepath,
+                              reinterpret_cast<const char*>(blob.raw_data.data()),
+                              blob.raw_data.size())) {
+            ++parsed;
+        } else {
+            ++failed;
+        }
+    }
+    std::cout << "Tree-sitter parsed " << parsed << " unique file versions";
+    if (failed) std::cout << "; " << failed << " unsupported or invalid";
+    std::cout << '\n';
+    if (!prepared) std::cerr << "One or more grammars were unavailable; see messages above\n";
+}
+
+25. GitTrace/gittrace.h:10-10  score=0.0123  cosine=0.1616  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+class TreeSitter
+
+26. GitTrace/utils/treesitter.h:19-19  score=0.0122  cosine=0.1605  commit=e2db25d8eb0fc8f3ea9263a531b2e72184eb11ae
+TreeSitter& operator=(const TreeSitter&) = delete;
+
+27. .gitignore:1-6  score=0.0120  cosine=0.1591  commit=a82d1f3c59ddcb97a4a40fd0d99ab35559a9950e
+llama.cpp/
+GitTrace/chunkdb/embedder/
+GitTrace/rsc/grammars/
+build/
+.vscode/
+.vgittrace/
+
+28. GitTrace/gittrace.cpp:83-91  score=0.0119  cosine=0.1574  commit=9d755e01956de1d5d8491876715b05d0f719bef5
+struct Context
+            {
+                git_repository* repo;
+                std::string curr_sha, a_name, a_email;
+                int64_t timestamp;
+                std::vector<Blob>* res;
+                std::unordered_set<std::string>* processed_blobs; 
+                std::set<std::string>* extensions;
+            }
+
+29. GitTrace/chunkdb/chunkdb.cpp:147-175  score=0.0118  cosine=0.1557  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+void ChunkDB::inferLineages()
+{
+    std::vector<std::size_t> chronological(chunks.size());
+    for (std::size_t i = 0; i < chronological.size(); ++i) chronological[i] = i;
+    std::stable_sort(chronological.begin(), chronological.end(), [&](std::size_t a, std::size_t b) {
+        if (chunks[a].filepath != chunks[b].filepath) return chunks[a].filepath < chunks[b].filepath;
+        return chunks[a].commit_time < chunks[b].commit_time;
+    });
+
+    for (std::size_t position = 0; position < chronological.size(); ++position) {
+        Chunk& current = chunks[chronological[position]];
+        float best_score = 0.78f;
+        const Chunk* best_parent = nullptr;
+        for (std::size_t prior = position; prior > 0; --prior) {
+            const Chunk& candidate = chunks[chronological[prior - 1]];
+            if (candidate.filepath != current.filepath) break;
+            if (candidate.commit_time >= current.commit_time ||
+                candidate.syntax_type != current.syntax_type) continue;
+            const float semantic = cosineSimilarity(current.embedding, candidate.embedding);
+            const uint32_t delta = current.syntax_ordinal > candidate.syntax_ordinal
+                ? current.syntax_ordinal - candidate.syntax_ordinal
+                : candidate.syntax_ordinal - current.syntax_ordinal;
+            const float topology = 1.0f / (1.0f + 0.15f * static_cast<float>(delta));
+            const float score = 0.85f * semantic + 0.15f * topology;
+            if (score > best_score) { best_score = score; best_parent = &candidate; }
+        }
+        current.lineage_depth = best_parent ? best_parent->lineage_depth + 1 : 0;
+    }
+}
+
+30. GitTrace/gittrace.cpp:51-184  score=0.0116  cosine=0.1530  commit=0674f66369180839f1a13e6878b2d9dfdd8f9cdc
+void GitTrace::beginGitTrace()
+{
+    if (!repo) {
+        std::cerr << "Cannot read commits before initializing GitTrace\n";
+        return;
+    }
+
+    git_revwalk* walker = nullptr;
+    if (git_revwalk_new(&walker, repo) < 0) {
+        std::cerr << "Could not create commit walker\n";
+        return;
+    }
+    git_revwalk_push_head(walker);
+    std::set<std::string> extensions;
+
+    git_oid oid;
+    std::unordered_set<std::string> seen_blobs;
+    while(git_revwalk_next(&oid, walker) == 0)
+    {
+        git_commit* commit = nullptr;
+        if(git_commit_lookup(&commit, repo, &oid) < 0) continue;
+
+        // SHA
+        char sha[41] = {0};
+        git_oid_tostr(sha, sizeof(sha), &oid);
+
+        // Mod and Author info
+        git_time_t commit_time = git_commit_time(commit);
+        const git_signature* auth = git_commit_author(commit);
+
+        git_tree* tree = nullptr;
+        if(git_commit_tree(&tree, commit) == 0)
+        {
+            struct Context
+            {
+                git_repository* repo;
+                std::string curr_sha, a_name, a_email;
+                int64_t timestamp;
+                std::vector<Blob>* res;
+                std::unordered_set<std::string>* processed_blobs; 
+                std::set<std::string>* extensions;
+            };
+
+            Context context {repo, sha, auth->name, auth->email, static_cast<int64_t>(commit_time), &blobs, &seen_blobs, &extensions};
+
+            auto tree_recursive = [](const char* root, const git_tree_entry* entry, void* payload) -> int 
+            {
+                if(git_tree_entry_type(entry) != GIT_OBJECT_BLOB)
+                {
+                    return 0;
+                }
+
+                Context* wcontext = static_cast<Context*>(payload);
+                
+                // Generate the string representation of the current blob's OID
+                const git_oid* entry_oid = git_tree_entry_id(entry);
+                char blob_sha[41] = {0};
+                git_oid_tostr(blob_sha, sizeof(blob_sha), entry_oid);
+                std::string blob_hash(blob_sha);
+
+                // Skip this file if we have already processed this exact byte-for-byte state
+                if (wcontext->processed_blobs->find(blob_hash) != wcontext->processed_blobs->end()) 
+                {
+                    return 0; 
+                }
+                wcontext->processed_blobs->insert(blob_hash);
+
+                git_blob* blob = nullptr;
+                if(git_blob_lookup(&blob, wcontext->repo, entry_oid) == 0)
+                {
+                    if(!git_blob_is_binary(blob))
+                    {
+                        Blob b;
+                        b.sha = wcontext->curr_sha;
+                        b.filepath = std::string(root) + git_tree_entry_name(entry);
+                        b.time_mod = wcontext->timestamp;
+                        b.author_name = wcontext->a_name;
+                        b.author_email = wcontext->a_email;
+
+                        const unsigned char* content = static_cast<const unsigned char*>(git_blob_rawcontent(blob));
+                        git_object_size_t size = git_blob_rawsize(blob);
+                        b.raw_data.assign(content, content + size);
+
+                        const auto dot = b.filepath.find_last_of('.');
+                        const auto slash = b.filepath.find_last_of("/\\");
+                        if (dot != std::string::npos && dot + 1 < b.filepath.size() &&
+                            (slash == std::string::npos || dot > slash) && dot > (slash == std::string::npos ? 0 : slash + 1)) {
+                            std::string extension = b.filepath.substr(dot + 1);
+                            std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) {
+                                return static_cast<char>(std::tolower(c));
+                            });
+                            wcontext->extensions->insert(std::move(extension));
+                        }
+
+                        wcontext->res->push_back(std::move(b));
+                    }
+
+                    git_blob_free(blob);
+                }
+
+                return 0;
+            };
+
+            git_tree_walk(tree, GIT_TREEWALK_PRE, tree_recursive, &context);
+            git_tree_free(tree);
+        }
+        git_commit_free(commit);
+    }
+    git_revwalk_free(walker);
+
+    std::vector<std::string> extension_list(extensions.begin(), extensions.end());
+    TreeSitter tree_sitter("GitTrace/rsc");
+    const bool prepared = tree_sitter.prepare(extension_list);
+    size_t parsed = 0;
+    size_t failed = 0;
+    for(const auto& blob : blobs) 
+    {
+        if(tree_sitter.parse(blob.filepath, reinterpret_cast<const char*>(blob.raw_data.data()), blob.raw_data.size())) 
+        {
+            parsed++;
+        } 
+        else 
+        {
+            failed++;
+        }
+    }
+
+    std::cout << "Tree-sitter parsed " << parsed << " unique file versions";
+    if(failed) std::cout << "; " << failed << " unsupported or invalid";
+    std::cout << "\n";
+    if(!prepared) std::cerr << "One or more grammars were unavailable; see messages above\n";
+
+    if (activate_chunkdb) chunkify(tree_sitter);
+}
+
+31. GitTrace/gittrace.h:12-35  score=0.0115  cosine=0.1510  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+class GitTrace
+{
+private:
+    git_repository* repo;
+    ChunkDB chunkdb;
+    char* repo_path;
+    int error;
+    bool initialized;
+    bool activate_chunkdb;
+
+    void chunkify(const TreeSitter& tree_sitter);
+
+public:
+    std::vector<Blob> blobs;
+
+    GitTrace();
+    ~GitTrace();
+
+    bool init(const char* path, bool activate_chunkdb);
+    void beginGitTrace();
+    std::vector<ChunkMatch> searchChunks(const std::string& query, std::size_t k = 5);
+
+    std::string lastError();
+}
+
+32. GitTrace/gittrace.cpp:50-180  score=0.0111  cosine=0.1473  commit=e2db25d8eb0fc8f3ea9263a531b2e72184eb11ae
+void GitTrace::beginGitTrace()
+{
+    if (!repo) {
+        std::cerr << "Cannot read commits before initializing GitTrace\n";
+        return;
+    }
+
+    git_revwalk* walker = nullptr;
+    if (git_revwalk_new(&walker, repo) < 0) {
+        std::cerr << "Could not create commit walker\n";
+        return;
+    }
+    git_revwalk_push_head(walker);
+    std::set<std::string> extensions;
+
+    git_oid oid;
+    std::unordered_set<std::string> seen_blobs;
+    while(git_revwalk_next(&oid, walker) == 0)
+    {
+        git_commit* commit = nullptr;
+        if(git_commit_lookup(&commit, repo, &oid) < 0) continue;
+
+        // SHA
+        char sha[41] = {0};
+        git_oid_tostr(sha, sizeof(sha), &oid);
+
+        // Mod and Author info
+        git_time_t commit_time = git_commit_time(commit);
+        const git_signature* auth = git_commit_author(commit);
+
+        git_tree* tree = nullptr;
+        if(git_commit_tree(&tree, commit) == 0)
+        {
+            struct Context
+            {
+                git_repository* repo;
+                std::string curr_sha, a_name, a_email;
+                int64_t timestamp;
+                std::vector<Blob>* res;
+                std::unordered_set<std::string>* processed_blobs; 
+                std::set<std::string>* extensions;
+            };
+
+            Context context {repo, sha, auth->name, auth->email, static_cast<int64_t>(commit_time), &blobs, &seen_blobs, &extensions};
+
+            auto tree_recursive = [](const char* root, const git_tree_entry* entry, void* payload) -> int 
+            {
+                if(git_tree_entry_type(entry) != GIT_OBJECT_BLOB)
+                {
+                    return 0;
+                }
+
+                Context* wcontext = static_cast<Context*>(payload);
+                
+                // Generate the string representation of the current blob's OID
+                const git_oid* entry_oid = git_tree_entry_id(entry);
+                char blob_sha[41] = {0};
+                git_oid_tostr(blob_sha, sizeof(blob_sha), entry_oid);
+                std::string blob_hash(blob_sha);
+
+                // Skip this file if we have already processed this exact byte-for-byte state
+                if (wcontext->processed_blobs->find(blob_hash) != wcontext->processed_blobs->end()) 
+                {
+                    return 0; 
+                }
+                wcontext->processed_blobs->insert(blob_hash);
+
+                git_blob* blob = nullptr;
+                if(git_blob_lookup(&blob, wcontext->repo, entry_oid) == 0)
+                {
+                    if(!git_blob_is_binary(blob))
+                    {
+                        Blob b;
+                        b.sha = wcontext->curr_sha;
+                        b.filepath = std::string(root) + git_tree_entry_name(entry);
+                        b.time_mod = wcontext->timestamp;
+                        b.author_name = wcontext->a_name;
+                        b.author_email = wcontext->a_email;
+
+                        const unsigned char* content = static_cast<const unsigned char*>(git_blob_rawcontent(blob));
+                        git_object_size_t size = git_blob_rawsize(blob);
+                        b.raw_data.assign(content, content + size);
+
+                        const auto dot = b.filepath.find_last_of('.');
+                        const auto slash = b.filepath.find_last_of("/\\");
+                        if (dot != std::string::npos && dot + 1 < b.filepath.size() &&
+                            (slash == std::string::npos || dot > slash) && dot > (slash == std::string::npos ? 0 : slash + 1)) {
+                            std::string extension = b.filepath.substr(dot + 1);
+                            std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) {
+                                return static_cast<char>(std::tolower(c));
+                            });
+                            wcontext->extensions->insert(std::move(extension));
+                        }
+
+                        wcontext->res->push_back(std::move(b));
+                    }
+
+                    git_blob_free(blob);
+                }
+
+                return 0;
+            };
+
+            git_tree_walk(tree, GIT_TREEWALK_PRE, tree_recursive, &context);
+            git_tree_free(tree);
+        }
+        git_commit_free(commit);
+    }
+    git_revwalk_free(walker);
+
+    std::vector<std::string> extension_list(extensions.begin(), extensions.end());
+    TreeSitter tree_sitter("GitTrace/rsc");
+    const bool prepared = tree_sitter.prepare(extension_list);
+    size_t parsed = 0;
+    size_t failed = 0;
+    for(const auto& blob : blobs) 
+    {
+        if(tree_sitter.parse(blob.filepath, reinterpret_cast<const char*>(blob.raw_data.data()), blob.raw_data.size())) 
+        {
+            parsed++;
+        } 
+        else 
+        {
+            failed++;
+        }
+    }
+    std::cout << "Tree-sitter parsed " << parsed << " unique file versions";
+    if(failed) std::cout << "; " << failed << " unsupported or invalid";
+    std::cout << "\n";
+    if(!prepared) std::cerr << "One or more grammars were unavailable; see messages above\n";
+}
+query> 

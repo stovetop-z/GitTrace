@@ -1,0 +1,26 @@
+{
+  "date": "2026-11-08",
+  "platform": "macOS arm64",
+  "fixtures": {
+    "new_file_commit": {
+      "repository": "two-commit temporary C++ repository",
+      "cold_manifest_fingerprint_ms": 5.31683,
+      "manifest_fingerprint_ms": 5.42,
+      "cached_head_commit_visits": 1,
+      "incremental_embedding_calls": 1,
+      "clean_rebuild_embedding_calls": 2,
+      "indexed_file_states": 2,
+      "chunks": 2,
+      "sqlite_chunks_and_occurrences_equal_to_clean_rebuild": true
+    },
+    "metadata_only_commit": {
+      "repository": "two-commit temporary C++ repository with an allow-empty commit",
+      "new_commit_visits": 1,
+      "manifest_fingerprint_ms": 5.42,
+      "embedding_calls": 0,
+      "embedding_model_load_ms": 0,
+      "chunks": 1,
+      "occurrence_rows": 2
+    }
+  }
+}

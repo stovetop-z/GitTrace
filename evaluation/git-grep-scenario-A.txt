@@ -1,0 +1,15 @@
+HEAD:GitTrace/chunkdb/chunkdb.cpp:177:void ChunkDB::alignHistoricalChunks() { inferLineages(); }
+HEAD:GitTrace/chunkdb/chunkdb.h:44:    void alignHistoricalChunks();
+HEAD:GitTrace/gittrace.cpp:258:    chunkdb.alignHistoricalChunks();
+HEAD:LICENSE:42:      editorial revisions, annotations, elaborations, or other modifications
+HEAD:README.md:121:The response keeps each caller-provided `id`, so GitTrace can join the decisions back to its chunks. `min_relevance` accepts `direct`, `related` (the default), or `any`; every result is returned in relevance order with an `accepted` flag. Requests accept up to 64 candidates. The request's `max_len` defaults to 256 tokens to keep reranking responsive; the English checkpoint supports up to 512. Set `GITTRACE_LAYA_HOST` and `GITTRACE_LAYA_PORT` to change the bind address and port. Set `GITTRACE_LAYA_MODEL` or `GITTRACE_LAYA_SUBFOLDER` to select a different checkpoint.
+HEAD:README.md:138:Historical chunks are aligned heuristically within the same file. GitTrace compares chunks from older versions using embedding similarity, syntax-node type, and their relative order in the file. A matched chunk inherits a lineage depth; search similarity is then reduced by `exp(-0.12 × depth)` so newer versions rank ahead when otherwise equally relevant. This is a per-file snapshot heuristic: it does not currently use Git parent/merge relationships, and unmatched or low-confidence chunks start new lineages.
+HEAD:laya_service.py:39:            "direct": "Contains the requested implementation, definition, configuration, or historical evidence.",
+HEAD:laya_service.py:75:            subfolder = os.environ.get("GITTRACE_LAYA_SUBFOLDER")
+HEAD:laya_service.py:76:            app.state.agent = load(model_id, subfolder=subfolder) if subfolder else load(model_id)
+HEAD:laya_service.py:140:        "direct: contains the requested implementation, definition, configuration, or historical evidence. "
+HEAD:main.cc:285:        std::cout << "\nUnique historical file versions:\n";
+HEAD:test.cpp:92:        const std::string revision_command = prefix + "log -1 --format=%s " + blob.sha;
+HEAD:test.cpp:94:        if (!run(revision_command + " > \"" + output_path + "\"")) {
+HEAD:test.cpp:116:        std::cerr << "Some expected historical blobs were not retrieved\n";
+HEAD:test.cpp:120:              << " unique historical blobs).\n";

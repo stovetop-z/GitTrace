@@ -1,0 +1,41 @@
+{
+  "date": "2026-11-08",
+  "fixture": "temporary one-file C++ repository, one commit, one semantic chunk",
+  "platform": "macOS arm64",
+  "embedding_backend": "CPU fallback",
+  "cold": {
+    "cache_hit": false,
+    "init_ms": 0.208791,
+    "embedding_model_load_ms": 6649.99,
+    "history_walk_ms": 6.28258,
+    "grammar_prepare_ms": 353.457,
+    "parsing_ms": 3.24496,
+    "chunk_embedding_ms": 1735.32,
+    "chunking_ms": 18.358,
+    "lineage_alignment_ms": 0.007291,
+    "cache_save_ms": 9.31483,
+    "embedding_calls": 1,
+    "commits_visited": 1,
+    "unique_file_versions": 1,
+    "parsed_files": 1,
+    "chunks_created": 1
+  },
+  "warm": {
+    "cache_hit": true,
+    "init_ms": 1.25029,
+    "cache_load_ms": 0.895209,
+    "embedding_model_load_ms": 0,
+    "history_walk_ms": 0,
+    "grammar_prepare_ms": 0,
+    "parsing_ms": 0,
+    "chunk_embedding_ms": 0,
+    "chunking_ms": 0,
+    "lineage_alignment_ms": 0,
+    "cache_save_ms": 0,
+    "embedding_calls": 0,
+    "commits_visited": 0,
+    "unique_file_versions": 0,
+    "parsed_files": 0,
+    "chunks_created": 1
+  }
+}

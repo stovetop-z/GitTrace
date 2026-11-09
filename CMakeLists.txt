@@ -1,6 +1,31 @@
 cmake_minimum_required(VERSION 3.10.0)
 project(GitTrace VERSION 0.1.0 LANGUAGES C CXX)
 
+find_package(Git QUIET)
+set(GITTRACE_BUILD_ID "${PROJECT_VERSION}+unknown")
+if(GIT_FOUND)
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" rev-parse --short=12 HEAD
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        OUTPUT_VARIABLE GITTRACE_GIT_REV
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" status --porcelain --untracked-files=normal
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        OUTPUT_VARIABLE GITTRACE_GIT_STATUS
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(GITTRACE_GIT_REV)
+        set(GITTRACE_BUILD_ID "${PROJECT_VERSION}+${GITTRACE_GIT_REV}")
+        if(GITTRACE_GIT_STATUS)
+            string(APPEND GITTRACE_BUILD_ID "-dirty")
+        endif()
+    endif()
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # libgit2's build/cmake directory contains a package config, but not the
@@ -19,6 +44,7 @@ find_package(libgit2 CONFIG REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(TREE_SITTER REQUIRED IMPORTED_TARGET tree-sitter)
 pkg_check_modules(LIBCURL REQUIRED IMPORTED_TARGET libcurl)
+pkg_check_modules(SQLITE3 REQUIRED IMPORTED_TARGET sqlite3)
 
 set(LLAMA_BUILD_COMMON OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -32,9 +58,12 @@ add_executable(GitTrace
     main.cc
     GitTrace/laya_client.cpp
     GitTrace/chunkdb/chunkdb.cpp
+    GitTrace/chunkdb/retrieval.cpp
+    GitTrace/chunkdb/index_store.cpp
     GitTrace/gittrace.cpp
     GitTrace/utils/treesitter.cpp
 )
+target_compile_definitions(GitTrace PRIVATE GITTRACE_BUILD_ID="${GITTRACE_BUILD_ID}")
 target_include_directories(GitTrace PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/llama.cpp/vendor
 )
@@ -43,12 +72,15 @@ target_link_libraries(GitTrace PRIVATE
     llama
     PkgConfig::TREE_SITTER
     PkgConfig::LIBCURL
+    PkgConfig::SQLITE3
     ${CMAKE_DL_LIBS}
 )
 
 add_executable(GitTraceRetrievalTest
     test.cpp
     GitTrace/chunkdb/chunkdb.cpp
+    GitTrace/chunkdb/retrieval.cpp
+    GitTrace/chunkdb/index_store.cpp
     GitTrace/gittrace.cpp
     GitTrace/utils/treesitter.cpp
 )
@@ -56,6 +88,7 @@ target_link_libraries(GitTraceRetrievalTest PRIVATE
     libgit2::libgit2package
     llama
     PkgConfig::TREE_SITTER
+    PkgConfig::SQLITE3
     ${CMAKE_DL_LIBS}
 )
 

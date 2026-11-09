@@ -1,0 +1,92 @@
+Scenario A — Older revisions
+
+Intent: The user is searching for an old revision of a specific logic in the codebase that they did not work on.
+
+Standard Git search
+
+Command:
+git grep -n -I -i -E 'older|historical|revision' HEAD
+
+Git grep output:
+HEAD:GitTrace/chunkdb/chunkdb.cpp:177:void ChunkDB::alignHistoricalChunks() { inferLineages(); }
+HEAD:GitTrace/chunkdb/chunkdb.h:44:    void alignHistoricalChunks();
+HEAD:GitTrace/gittrace.cpp:258:    chunkdb.alignHistoricalChunks();
+HEAD:LICENSE:42:      editorial revisions, annotations, elaborations, or other modifications
+HEAD:README.md:121:The response keeps each caller-provided `id`, so GitTrace can join the decisions back to its chunks. `min_relevance` accepts `direct`, `related` (the default), or `any`; every result is returned in relevance order with an `accepted` flag. Requests accept up to 64 candidates. The request's `max_len` defaults to 256 tokens to keep reranking responsive; the English checkpoint supports up to 512. Set `GITTRACE_LAYA_HOST` and `GITTRACE_LAYA_PORT` to change the bind address and port. Set `GITTRACE_LAYA_MODEL` or `GITTRACE_LAYA_SUBFOLDER` to select a different checkpoint.
+HEAD:README.md:138:Historical chunks are aligned heuristically within the same file. GitTrace compares chunks from older versions using embedding similarity, syntax-node type, and their relative order in the file. A matched chunk inherits a lineage depth; search similarity is then reduced by `exp(-0.12 × depth)` so newer versions rank ahead when otherwise equally relevant. This is a per-file snapshot heuristic: it does not currently use Git parent/merge relationships, and unmatched or low-confidence chunks start new lineages.
+HEAD:laya_service.py:39:            "direct": "Contains the requested implementation, definition, configuration, or historical evidence.",
+HEAD:laya_service.py:75:            subfolder = os.environ.get("GITTRACE_LAYA_SUBFOLDER")
+HEAD:laya_service.py:76:            app.state.agent = load(model_id, subfolder=subfolder) if subfolder else load(model_id)
+HEAD:laya_service.py:140:        "direct: contains the requested implementation, definition, configuration, or historical evidence. "
+HEAD:main.cc:285:        std::cout << "\nUnique historical file versions:\n";
+HEAD:test.cpp:92:        const std::string revision_command = prefix + "log -1 --format=%s " + blob.sha;
+HEAD:test.cpp:94:        if (!run(revision_command + " > \"" + output_path + "\"")) {
+HEAD:test.cpp:116:        std::cerr << "Some expected historical blobs were not retrieved\n";
+HEAD:test.cpp:120:              << " unique historical blobs).\n";
+
+GitTrace search
+
+User query: What calculation downweights chunks from older revisions during search?
+
+GitTrace output (hybrid, top 5; query expansion and reranking off):
+1. GitTrace/gittrace.cpp:186-193  score=0.0315  cosine=0.2563  lineage-adjusted=0.2563  commit=0674f66369180839f1a13e6878b2d9dfdd8f9cdc
+std::vector<ChunkMatch> GitTrace::searchChunks(const std::string& query, std::size_t k)
+{
+    if (!initialized || !activate_chunkdb) {
+        std::cerr << "Cannot search chunks: embedding database is not active\n";
+        return {};
+    }
+    return chunkdb.search(query, k);
+}
+
+2. GitTrace/chunkdb/chunkdb.h:46-48  score=0.0312  cosine=0.2831  lineage-adjusted=0.2831  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+    std::vector<Chunk*> getSimilarChunks(const std::vector<float>& embedding, uint8_t k = 3);
+    std::vector<ChunkMatch> search(const std::string& query, std::size_t k = 5);
+}
+
+3. GitTrace/chunkdb/chunkdb.cpp:230-246  score=0.0308  cosine=0.3614  lineage-adjusted=0.2843  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+std::vector<ChunkMatch> ChunkDB::search(const std::string& query, std::size_t k)
+{
+    const std::vector<float> query_embedding = embed(query, true, false);
+    if (query_embedding.empty() || k == 0) return {};
+
+    std::vector<ChunkMatch> matches;
+    matches.reserve(chunks.size());
+    for (const Chunk& chunk : chunks) {
+        const float decay = std::exp(-0.12f * static_cast<float>(chunk.lineage_depth));
+        matches.push_back({&chunk, cosineSimilarity(query_embedding, chunk.embedding) * decay});
+    }
+    std::sort(matches.begin(), matches.end(), [](const ChunkMatch& lhs, const ChunkMatch& rhs) {
+        return lhs.similarity > rhs.similarity;
+    });
+    if (matches.size() > k) matches.resize(k);
+    return matches;
+}
+
+4. GitTrace/chunkdb/chunkdb.cpp:192-207  score=0.0301  cosine=0.2832  lineage-adjusted=0.2512  commit=0674f66369180839f1a13e6878b2d9dfdd8f9cdc
+std::vector<ChunkMatch> ChunkDB::search(const std::string& query, std::size_t k)
+{
+    const std::vector<float> query_embedding = embed(query, true, false);
+    if (query_embedding.empty() || k == 0) return {};
+
+    std::vector<ChunkMatch> matches;
+    matches.reserve(chunks.size());
+    for (const Chunk& chunk : chunks) {
+        matches.push_back({&chunk, cosineSimilarity(query_embedding, chunk.embedding)});
+    }
+    std::sort(matches.begin(), matches.end(), [](const ChunkMatch& lhs, const ChunkMatch& rhs) {
+        return lhs.similarity > rhs.similarity;
+    });
+    if (matches.size() > k) matches.resize(k);
+    return matches;
+}
+
+5. GitTrace/gittrace.cpp:211-218  score=0.0296  cosine=0.2563  lineage-adjusted=0.2273  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+std::vector<ChunkMatch> GitTrace::searchChunks(const std::string& query, std::size_t k)
+{
+    if (!initialized || !activate_chunkdb) {
+        std::cerr << "Cannot search chunks: embedding database is not active\n";
+        return {};
+    }
+    return chunkdb.search(query, k);
+}

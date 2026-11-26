@@ -1,0 +1,1326 @@
+Loading...
+
+Embedding: 32 chunks from 32 inputs in 8 model calls | failures 0 | 27.3 chunks/s | 1.2 s
+Embedding: 64 chunks from 64 inputs in 16 model calls | failures 0 | 31.8 chunks/s | 2.0 s
+Embedding: 96 chunks from 96 inputs in 24 model calls | failures 0 | 30.0 chunks/s | 3.2 s
+Embedding: 128 chunks from 128 inputs in 32 model calls | failures 0 | 34.0 chunks/s | 3.8 s
+Embedding: 160 chunks from 160 inputs in 40 model calls | failures 0 | 34.2 chunks/s | 4.7 s
+Embedding: 192 chunks from 192 inputs in 48 model calls | failures 0 | 32.1 chunks/s | 6.0 s
+Embedding: 224 chunks from 224 inputs in 56 model calls | failures 0 | 33.7 chunks/s | 6.7 s
+Embedding: 256 chunks from 256 inputs in 64 model calls | failures 0 | 34.0 chunks/s | 7.5 s
+Embedding: 288 chunks from 288 inputs in 72 model calls | failures 0 | 34.9 chunks/s | 8.3 s
+Embedding: 320 chunks from 320 inputs in 80 model calls | failures 0 | 34.9 chunks/s | 9.2 s
+Embedding: 352 chunks from 352 inputs in 88 model calls | failures 0 | 35.4 chunks/s | 9.9 s
+Embedding: 384 chunks from 384 inputs in 96 model calls | failures 0 | 36.3 chunks/s | 10.6 s
+Embedding: 416 chunks from 416 inputs in 104 model calls | failures 0 | 36.8 chunks/s | 11.3 s
+Embedding: 417 chunks from 417 inputs in 105 model calls | failures 0 | 36.8 chunks/s | 11.3 s
+Embedding complete: 417 chunks from 417 inputs in 105 model calls | failures 0 | 36.8 chunks/s | 11.3 s
+Retrieval mode: vector
+Query expansion: off
+
+Query: What scoring adjustment makes older versions of a code chunk less competitive in search?
+
+1. GitTrace/chunkdb/chunkdb.cpp:346-377  score=0.6638  cosine=0.6638  lineage-adjusted=0.6638  commit=54853ec0c64c73941f5012759110518970add516
+    std::stable_sort(lexical_order.begin(), lexical_order.end(), [&](std::size_t lhs, std::size_t rhs) {
+        return lexical_score[lhs] > lexical_score[rhs];
+    });
+    std::fill(lexical_rank.begin(), lexical_rank.end(), 0);
+    for (std::size_t i = 0; i < lexical_order.size(); ++i) lexical_rank[lexical_order[i]] = i + 1;
+
+    if (mode == RetrievalMode::Keyword) {
+        for (std::size_t i = 0; i < count; ++i) {
+            matches[i].retrieval_score = static_cast<float>(lexical_score[i]);
+        }
+    } else if (mode == RetrievalMode::Vector) {
+        for (ChunkMatch& match : matches) match.retrieval_score = match.similarity;
+    } else {
+        constexpr double rrf_constant = 60.0;
+        for (std::size_t i = 0; i < count; ++i) {
+            double fused = 1.0 / (rrf_constant + static_cast<double>(vector_rank[i]));
+            if (lexical_rank[i] != 0) {
+                fused += 1.0 / (rrf_constant + static_cast<double>(lexical_rank[i]));
+            }
+            matches[i].retrieval_score = static_cast<float>(fused);
+        }
+    }
+
+    if (mode == RetrievalMode::Keyword) {
+        matches.erase(std::remove_if(matches.begin(), matches.end(), [](const ChunkMatch& match) {
+            return match.retrieval_score <= 0.0f;
+        }), matches.end());
+    }
+
+    std::stable_sort(matches.begin(), matches.end(), [](const ChunkMatch& lhs, const ChunkMatch& rhs) {
+        return lhs.retrieval_score > rhs.retrieval_score;
+    });
+
+2. GitTrace/chunkdb/chunkdb.cpp:315-345  score=0.6469  cosine=0.6469  lineage-adjusted=0.6469  commit=54853ec0c64c73941f5012759110518970add516
+    // Build a small in-memory BM25 ranking over chunk text and paths, then fuse
+    // it with vector ranks. Reciprocal rank fusion avoids comparing raw cosine
+    // scores directly with BM25 scores.
+    const std::size_t count = matches.size();
+    std::vector<std::size_t> vector_rank(count, 0);
+    if (mode != RetrievalMode::Keyword) {
+        std::vector<std::size_t> vector_order(count);
+        std::iota(vector_order.begin(), vector_order.end(), 0);
+        std::stable_sort(vector_order.begin(), vector_order.end(), [&](std::size_t lhs, std::size_t rhs) {
+            return matches[lhs].similarity > matches[rhs].similarity;
+        });
+        for (std::size_t i = 0; i < count; ++i) vector_rank[vector_order[i]] = i + 1;
+    }
+
+    std::vector<std::string> documents;
+    documents.reserve(count);
+    for (std::size_t i = 0; i < count; ++i) {
+        documents.push_back(chunks[i].input + " " + chunks[i].filepath);
+    }
+    const std::vector<double> lexical_score =
+        gittrace::retrieval::bm25Scores(query, documents, expand_query_terms);
+
+    std::vector<std::size_t> lexical_rank(count, 0);
+    for (std::size_t i = 0; i < count; ++i) {
+        if (lexical_score[i] > 0.0) lexical_rank[i] = i + 1;
+    }
+    std::vector<std::size_t> lexical_order;
+    lexical_order.reserve(count);
+    for (std::size_t i = 0; i < count; ++i) {
+        if (lexical_score[i] > 0.0) lexical_order.push_back(i);
+    }
+
+3. test.cpp:64-91  score=0.6328  cosine=0.6328  lineage-adjusted=0.6328  commit=54853ec0c64c73941f5012759110518970add516
+            "Warning: could not reach the reranker. Showing vector results without reranking.",
+            false
+        }
+    };
+
+    const std::vector<std::string> distractors = {
+        "Parse command line arguments, print usage, and initialize the repository scanner.",
+        "A generic helper iterates over values and returns the first matching entry."
+    };
+    for (const Fixture& fixture : fixtures) {
+        const std::vector<std::string> documents = {fixture.target, distractors[0], distractors[1]};
+        const std::vector<double> baseline =
+            gittrace::retrieval::bm25Scores(fixture.query, documents, false);
+        const std::vector<double> expanded =
+            gittrace::retrieval::bm25Scores(fixture.query, documents, true);
+        if (expanded[0] <= expanded[1] || expanded[0] <= expanded[2]) {
+            std::cerr << "Keyword fixture failed to rank target first for query: "
+                      << fixture.query << '\n';
+            return false;
+        }
+        if (fixture.expect_expansion_gain && expanded[0] <= baseline[0]) {
+            std::cerr << "Query expansion did not improve its lexical fixture for query: "
+                      << fixture.query << '\n';
+            return false;
+        }
+    }
+    return true;
+}
+
+4. main.cc:109-131  score=0.5665  cosine=0.5665  lineage-adjusted=0.5665  commit=7c1352366b18c9a85aa07e624cffa11e43b1cd1b
+                          << " candidates as relevant.\n";
+                if (accepted == 0) {
+                    std::cout << "No chunks passed Laya's relevance filter.\n";
+                    continue;
+                }
+                std::size_t rank = 0;
+                for (const LayaMatch& match : reranked) {
+                    if (!match.accepted) continue;
+                    print_match(match.match, ++rank, &match);
+                    if (rank == top_k) break;
+                }
+                continue;
+            }
+            std::cerr << "Warning: could not reach Laya at " << laya_url
+                      << " (" << error << "). Showing vector results without reranking.\n";
+        }
+
+        for (std::size_t i = 0; i < std::min(top_k, matches.size()); ++i) {
+            print_match(matches[i], i + 1);
+        }
+    }
+    std::cout << "Leaving interactive search.\n";
+}
+
+5. laya_service.py:129-160  score=0.5606  cosine=0.5606  lineage-adjusted=0.5606  commit=7c1352366b18c9a85aa07e624cffa11e43b1cd1b
+        decision = str(answer.get("choice", "irrelevant")).lower()
+        if decision not in DECISION_ORDER:
+            decision = "irrelevant"
+        confidence = answer.get("answer_confidence", answer.get("confidence", 0.0))
+        try:
+            confidence = float(confidence)
+        except (TypeError, ValueError):
+            confidence = 0.0
+
+        results.append({
+            "id": candidate.id,
+            "path": candidate.path,
+            "commit_sha": candidate.commit_sha,
+            "start_line": candidate.start_line,
+            "end_line": candidate.end_line,
+            "similarity": candidate.similarity,
+            "relevance": decision,
+            "confidence": confidence,
+            "accepted": DECISION_ORDER[decision] <= min_rank,
+        })
+
+    results.sort(key=lambda item: (
+        DECISION_ORDER[item["relevance"]],
+        -item["confidence"],
+        -(item["similarity"] if item["similarity"] is not None else -1.0),
+    ))
+    return {
+        "query": body.query,
+        "candidate_count": len(body.candidates),
+        "accepted_count": sum(1 for item in results if item["accepted"]),
+        "results": results,
+    }
+
+Query: Before scanning a repository, where are its own file-exclusion patterns loaded?
+
+1. GitTrace/gittrace.cpp:68-92  score=0.6325  cosine=0.6325  lineage-adjusted=0.6325  commit=54853ec0c64c73941f5012759110518970add516
+    if (gitdir) rule_files.emplace_back(".git/info/exclude", read_file(std::filesystem::path(gitdir) / "info" / "exclude"));
+
+    git_config* config = nullptr;
+    if (git_repository_config(&config, repo) == 0) {
+        const char* configured_excludes = nullptr;
+        if (git_config_get_string(&configured_excludes, config, "core.excludesfile") == 0 && configured_excludes) {
+            std::filesystem::path path(configured_excludes);
+            const char* home = std::getenv("HOME");
+            if (path.string().rfind("~/", 0) == 0) {
+                if (home) path = std::filesystem::path(home) / path.string().substr(2);
+            }
+            rule_files.emplace_back("core.excludesfile=" + path.string(), read_file(path));
+            if (!path.is_absolute() && home)
+                rule_files.emplace_back("core.excludesfile-home=" +
+                    (std::filesystem::path(home) / path).string(),
+                    read_file(std::filesystem::path(home) / path));
+        } else {
+            const char* home = std::getenv("HOME");
+            const char* xdg = std::getenv("XDG_CONFIG_HOME");
+            if (xdg && *xdg)
+                rule_files.emplace_back("xdg-ignore", read_file(std::filesystem::path(xdg) / "git" / "ignore"));
+            else if (home)
+                rule_files.emplace_back("xdg-ignore", read_file(std::filesystem::path(home) / ".config" / "git" / "ignore"));
+        }
+        int ignore_case = 0;
+
+2. GitTrace/gittrace.cpp:37-67  score=0.6018  cosine=0.6018  lineage-adjusted=0.6018  commit=54853ec0c64c73941f5012759110518970add516
+std::string ignore_fingerprint(git_repository* repo, const std::filesystem::path& root)
+{
+    std::vector<std::pair<std::string, std::string>> rule_files;
+    std::error_code ec;
+    std::filesystem::recursive_directory_iterator it(
+        root, std::filesystem::directory_options::skip_permission_denied, ec), end;
+    while (!ec && it != end) {
+        const auto path = it->path();
+        const std::string name = path.filename().string();
+        if (it->is_directory(ec)) {
+            if (name == ".git" || name == ".gittrace") {
+                it.disable_recursion_pending();
+            } else if (path != root) {
+                std::string relative = std::filesystem::relative(path, root, ec).generic_string();
+                if (!relative.empty()) {
+                    relative.push_back('/');
+                    int ignored = 0;
+                    if (git_ignore_path_is_ignored(&ignored, repo, relative.c_str()) == 0 && ignored)
+                        it.disable_recursion_pending();
+                }
+            }
+        } else if (!ec && name == ".gitignore") {
+            const auto relative = std::filesystem::relative(path, root, ec).generic_string();
+            if (!ec) rule_files.emplace_back(relative, read_file(path));
+        }
+        it.increment(ec);
+        if (ec) ec.clear();
+    }
+    rule_files.emplace_back(".gittraceignore", read_file(root / ".gittraceignore"));
+
+    const char* gitdir = git_repository_path(repo);
+
+3. GitTrace/gittrace.cpp:93-109  score=0.4613  cosine=0.4613  lineage-adjusted=0.4613  commit=54853ec0c64c73941f5012759110518970add516
+        if (git_config_get_bool(&ignore_case, config, "core.ignorecase") == 0)
+            rule_files.emplace_back("core.ignorecase", ignore_case ? "true" : "false");
+        git_config_free(config);
+    }
+
+    std::sort(rule_files.begin(), rule_files.end(), [](const auto& lhs, const auto& rhs) {
+        return lhs.first < rhs.first;
+    });
+    std::string serialized;
+    for (const auto& [path, contents] : rule_files) {
+        serialized += path;
+        serialized.push_back('\0');
+        serialized += contents;
+        serialized.push_back('\0');
+    }
+    return hash_text(serialized);
+}
+
+4. GitTrace/gittrace.cpp:528-557  score=0.4562  cosine=0.4562  lineage-adjusted=0.4562  commit=54853ec0c64c73941f5012759110518970add516
+                        if (dot != std::string::npos && dot + 1 < b.filepath.size() &&
+                            (slash == std::string::npos || dot > slash) && dot > (slash == std::string::npos ? 0 : slash + 1)) {
+                            std::string extension = b.filepath.substr(dot + 1);
+                            std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) {
+                                return static_cast<char>(std::tolower(c));
+                            });
+                            wcontext->extensions->insert(std::move(extension));
+                        }
+
+                        const std::size_t index = wcontext->res->size();
+                        wcontext->res->push_back(std::move(b));
+                        wcontext->processed_blobs->emplace(std::move(blob_identity), index);
+                    }
+
+                    git_blob_free(blob);
+                }
+
+                return 0;
+            };
+
+            git_tree_walk(tree, GIT_TREEWALK_PRE, tree_recursive, &context);
+            git_tree_free(tree);
+        }
+        git_commit_free(commit);
+    }
+    git_revwalk_free(walker);
+    metrics.history_walk_ms = std::chrono::duration<double, std::milli>(
+        Clock::now() - history_started).count();
+    metrics.unique_file_versions = (incremental_walk ? cached_chunk_indexes.size()
+                                                     : cached_states_seen.size()) + seen_blobs.size();
+
+5. GitTrace/gittrace.cpp:472-498  score=0.4468  cosine=0.4468  lineage-adjusted=0.4468  commit=54853ec0c64c73941f5012759110518970add516
+                int ignored = 0;
+                if (git_ignore_path_is_ignored(&ignored, wcontext->repo, filepath.c_str()) == 0 && ignored) {
+                    return 0;
+                }
+
+                GitOccurrence occurrence;
+                occurrence.commit_sha = wcontext->curr_sha;
+                occurrence.tree_sha = wcontext->tree_sha;
+                occurrence.filepath = filepath;
+                occurrence.blob_oid = blob_hash;
+                occurrence.commit_time = wcontext->timestamp;
+                occurrence.author_name = wcontext->a_name;
+                occurrence.author_email = wcontext->a_email;
+
+                const auto cached = wcontext->cached_chunks->find(blob_identity);
+                if (cached != wcontext->cached_chunks->end()) {
+                    wcontext->cached_states_seen->insert(blob_identity);
+                    for (const std::size_t chunk_index : cached->second) {
+                        if (chunk_index >= wcontext->existing_chunks->size()) continue;
+                        Chunk& chunk = wcontext->existing_chunks->at(chunk_index);
+                        if (chunk.occurrences.empty() || occurrence.commit_sha == wcontext->current_head_sha) {
+                            chunk.commit_sha = occurrence.commit_sha;
+                            chunk.commit_time = occurrence.commit_time;
+                        }
+                        chunk.occurrences.push_back(occurrence);
+                    }
+                    return 0;
+
+Query: During a history tree walk, how does GitTrace skip a path excluded by ignore rules?
+
+1. GitTrace/gittrace.cpp:37-67  score=0.6868  cosine=0.6868  lineage-adjusted=0.6868  commit=54853ec0c64c73941f5012759110518970add516
+std::string ignore_fingerprint(git_repository* repo, const std::filesystem::path& root)
+{
+    std::vector<std::pair<std::string, std::string>> rule_files;
+    std::error_code ec;
+    std::filesystem::recursive_directory_iterator it(
+        root, std::filesystem::directory_options::skip_permission_denied, ec), end;
+    while (!ec && it != end) {
+        const auto path = it->path();
+        const std::string name = path.filename().string();
+        if (it->is_directory(ec)) {
+            if (name == ".git" || name == ".gittrace") {
+                it.disable_recursion_pending();
+            } else if (path != root) {
+                std::string relative = std::filesystem::relative(path, root, ec).generic_string();
+                if (!relative.empty()) {
+                    relative.push_back('/');
+                    int ignored = 0;
+                    if (git_ignore_path_is_ignored(&ignored, repo, relative.c_str()) == 0 && ignored)
+                        it.disable_recursion_pending();
+                }
+            }
+        } else if (!ec && name == ".gitignore") {
+            const auto relative = std::filesystem::relative(path, root, ec).generic_string();
+            if (!ec) rule_files.emplace_back(relative, read_file(path));
+        }
+        it.increment(ec);
+        if (ec) ec.clear();
+    }
+    rule_files.emplace_back(".gittraceignore", read_file(root / ".gittraceignore"));
+
+    const char* gitdir = git_repository_path(repo);
+
+2. GitTrace/gittrace.cpp:68-92  score=0.5667  cosine=0.5667  lineage-adjusted=0.5667  commit=54853ec0c64c73941f5012759110518970add516
+    if (gitdir) rule_files.emplace_back(".git/info/exclude", read_file(std::filesystem::path(gitdir) / "info" / "exclude"));
+
+    git_config* config = nullptr;
+    if (git_repository_config(&config, repo) == 0) {
+        const char* configured_excludes = nullptr;
+        if (git_config_get_string(&configured_excludes, config, "core.excludesfile") == 0 && configured_excludes) {
+            std::filesystem::path path(configured_excludes);
+            const char* home = std::getenv("HOME");
+            if (path.string().rfind("~/", 0) == 0) {
+                if (home) path = std::filesystem::path(home) / path.string().substr(2);
+            }
+            rule_files.emplace_back("core.excludesfile=" + path.string(), read_file(path));
+            if (!path.is_absolute() && home)
+                rule_files.emplace_back("core.excludesfile-home=" +
+                    (std::filesystem::path(home) / path).string(),
+                    read_file(std::filesystem::path(home) / path));
+        } else {
+            const char* home = std::getenv("HOME");
+            const char* xdg = std::getenv("XDG_CONFIG_HOME");
+            if (xdg && *xdg)
+                rule_files.emplace_back("xdg-ignore", read_file(std::filesystem::path(xdg) / "git" / "ignore"));
+            else if (home)
+                rule_files.emplace_back("xdg-ignore", read_file(std::filesystem::path(home) / ".config" / "git" / "ignore"));
+        }
+        int ignore_case = 0;
+
+3. test.cpp:222-248  score=0.5427  cosine=0.6119  lineage-adjusted=0.5427  commit=54853ec0c64c73941f5012759110518970add516
+        !writeFile(repo / ".gitignore", "gitignored.txt\n") ||
+        !writeFile(repo / ".gittraceignore", "traceignored.txt\n") ||
+        !writeFile(repo / "gitignored.txt", "tracked despite gitignore\n") ||
+        !writeFile(repo / "traceignored.txt", "excluded by gittraceignore\n") ||
+        !run(prefix + "add .") || !run(prefix + "add -f gitignored.txt") ||
+        !run(prefix + "commit -q -m first") || !run(prefix + "checkout -q -b feature") ||
+        !run(prefix + "checkout -q main") ||
+        !writeFile(repo / "alpha.txt", "alpha version two\n") ||
+        !run(prefix + "mv beta.txt renamed-beta.txt") ||
+        !writeFile(repo / "new-file.txt", "new file in second commit\n") ||
+        !run(prefix + "add .") || !run(prefix + "commit -q -m second")) {
+        std::cerr << "Failed to create test history\n";
+        fs::remove_all(root, ec);
+        return 1;
+    }
+    if (!run(prefix + "checkout -q feature") ||
+        !writeFile(repo / "feature-only.txt", "reachable through merge\n") ||
+        !run(prefix + "add feature-only.txt") || !run(prefix + "commit -q -m feature") ||
+        !run(prefix + "checkout -q main") || !run(prefix + "merge --no-ff -q feature -m merge")) {
+        std::cerr << "Failed to create branch and merge history\n";
+        fs::remove_all(root, ec);
+        return 1;
+    }
+
+    GitTrace trace;
+    if (!trace.init(repo.string().c_str(), false)) {
+        std::cerr << "GitTrace could not open the test repository\n";
+
+4. GitTrace/gittrace.cpp:346-370  score=0.5204  cosine=0.5204  lineage-adjusted=0.5204  commit=54853ec0c64c73941f5012759110518970add516
+        std::string stored_manifest;
+        cache_error.clear();
+        if (gittrace::index::load(index_path.string(), config_manifest, cached_chunks,
+                                  cache_error, true, &stored_manifest)) {
+            const auto head_marker = stored_manifest.rfind(";head=");
+            const std::string old_head = head_marker == std::string::npos
+                ? std::string() : stored_manifest.substr(head_marker + 6);
+            prior_head = old_head;
+            git_reference* current_ref = nullptr;
+            git_oid current_oid{};
+            git_oid old_oid{};
+            const bool have_current = git_repository_head(&current_ref, repo) == 0 &&
+                git_reference_target(current_ref) &&
+                (current_oid = *git_reference_target(current_ref), true);
+            if (current_ref) git_reference_free(current_ref);
+            const bool have_old = !old_head.empty() && git_oid_fromstr(&old_oid, old_head.c_str()) == 0;
+            incremental_walk = have_current && have_old &&
+                git_graph_descendant_of(repo, &current_oid, &old_oid) == 1;
+
+            chunkdb.replaceChunks(std::move(cached_chunks));
+            auto& chunks = chunkdb.getMutableChunks();
+            for (std::size_t i = 0; i < chunks.size(); ++i) {
+                if (!chunks[i].occurrences.empty()) {
+                    const GitOccurrence& occurrence = chunks[i].occurrences.front();
+                    std::string identity = occurrence.blob_oid;
+
+5. GitTrace/gittrace.cpp:528-557  score=0.5194  cosine=0.5194  lineage-adjusted=0.5194  commit=54853ec0c64c73941f5012759110518970add516
+                        if (dot != std::string::npos && dot + 1 < b.filepath.size() &&
+                            (slash == std::string::npos || dot > slash) && dot > (slash == std::string::npos ? 0 : slash + 1)) {
+                            std::string extension = b.filepath.substr(dot + 1);
+                            std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) {
+                                return static_cast<char>(std::tolower(c));
+                            });
+                            wcontext->extensions->insert(std::move(extension));
+                        }
+
+                        const std::size_t index = wcontext->res->size();
+                        wcontext->res->push_back(std::move(b));
+                        wcontext->processed_blobs->emplace(std::move(blob_identity), index);
+                    }
+
+                    git_blob_free(blob);
+                }
+
+                return 0;
+            };
+
+            git_tree_walk(tree, GIT_TREEWALK_PRE, tree_recursive, &context);
+            git_tree_free(tree);
+        }
+        git_commit_free(commit);
+    }
+    git_revwalk_free(walker);
+    metrics.history_walk_ms = std::chrono::duration<double, std::milli>(
+        Clock::now() - history_started).count();
+    metrics.unique_file_versions = (incremental_walk ? cached_chunk_indexes.size()
+                                                     : cached_states_seen.size()) + seen_blobs.size();
+
+Query: Why are identical file contents at two different paths kept as separate indexed states?
+
+1. test.cpp:128-156  score=0.6031  cosine=0.6031  lineage-adjusted=0.6031  commit=54853ec0c64c73941f5012759110518970add516
+    source.push_back(chunk);
+
+    std::string error;
+    if (!gittrace::index::save(path.string(), "config-v1;head=old-head", source, error)) {
+        std::cerr << "Could not save SQLite index fixture: " << error << '\n';
+        return false;
+    }
+    const auto status = gittrace::index::inspect(path.string(), "config-v1;head=old-head");
+    const auto stale_status = gittrace::index::inspect(path.string(), "different-manifest");
+    if (!status.exists || !status.compatible || status.chunks != 1 || stale_status.compatible) {
+        std::cerr << "SQLite index status did not report compatibility correctly\n";
+        return false;
+    }
+    std::vector<Chunk> loaded;
+    if (!gittrace::index::load(path.string(), "config-v1;head=old-head", loaded, error)) {
+        std::cerr << "Could not load SQLite index fixture: " << error << '\n';
+        return false;
+    }
+    if (loaded.size() != 1 || loaded[0].id != 7 || loaded[0].embedding != chunk.embedding ||
+        loaded[0].input != chunk.input || loaded[0].filepath != chunk.filepath ||
+        loaded[0].occurrences.size() != 1 ||
+        loaded[0].occurrences[0].tree_sha != occurrence.tree_sha ||
+        loaded[0].occurrences[0].blob_oid != occurrence.blob_oid) {
+        std::cerr << "SQLite index round trip changed chunk or occurrence data\n";
+        return false;
+    }
+    loaded.clear();
+    std::string stored_manifest;
+    if (!gittrace::index::load(path.string(), "config-v1", loaded, error, true,
+
+2. GitTrace/gittrace.cpp:320-345  score=0.5978  cosine=0.5978  lineage-adjusted=0.5978  commit=54853ec0c64c73941f5012759110518970add516
+    std::unordered_map<std::string, std::vector<std::size_t>> cached_chunk_indexes;
+    if (activate_chunkdb && use_index_cache && !force_rebuild && !manifest.empty()) {
+        std::vector<Chunk> cached_chunks;
+        std::string cache_error;
+        const auto cache_started = std::chrono::steady_clock::now();
+        if (gittrace::index::load(index_path.string(), manifest, cached_chunks, cache_error)) {
+            chunkdb.replaceChunks(std::move(cached_chunks));
+            metrics.cache_load_ms = std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - cache_started).count();
+            metrics.cache_hit = true;
+            metrics.chunks_created = chunkdb.getChunks().size();
+            std::set<std::string> cached_file_states;
+            for (const Chunk& chunk : chunkdb.getChunks()) {
+                for (const GitOccurrence& occurrence : chunk.occurrences) {
+                    std::string identity = occurrence.blob_oid;
+                    identity.push_back('\0');
+                    identity += occurrence.filepath;
+                    cached_file_states.insert(std::move(identity));
+                }
+            }
+            metrics.unique_file_versions = cached_file_states.size();
+            std::cout << "Loaded " << metrics.chunks_created << " chunks from "
+                      << index_path.string() << "\n";
+            return true;
+        }
+        const std::string exact_error = cache_error;
+
+3. test.cpp:157-181  score=0.5413  cosine=0.5413  lineage-adjusted=0.5413  commit=54853ec0c64c73941f5012759110518970add516
+                               &stored_manifest) ||
+        stored_manifest != "config-v1;head=old-head") {
+        std::cerr << "SQLite index did not accept a compatible prior HEAD for refresh\n";
+        return false;
+    }
+    loaded.clear();
+    if (gittrace::index::load(path.string(), "different-config", loaded, error, true)) {
+        std::cerr << "SQLite index accepted incompatible settings for incremental refresh\n";
+        return false;
+    }
+    if (gittrace::index::load(path.string(), "different-manifest", loaded, error)) {
+        std::cerr << "SQLite index accepted a stale manifest\n";
+        return false;
+    }
+    {
+        std::ofstream corrupt(path, std::ios::binary | std::ios::trunc);
+        corrupt << "not a SQLite database";
+    }
+    if (!gittrace::index::save(path.string(), "recovered-manifest", source, error) ||
+        !gittrace::index::load(path.string(), "recovered-manifest", loaded, error)) {
+        std::cerr << "Atomic index replacement did not recover a corrupt database: " << error << '\n';
+        return false;
+    }
+    return true;
+}
+
+4. test.cpp:93-127  score=0.5351  cosine=0.5351  lineage-adjusted=0.5351  commit=54853ec0c64c73941f5012759110518970add516
+static bool indexStoreRoundTripPass(const fs::path& path)
+{
+    {
+        gittrace::index::WriterLock first;
+        gittrace::index::WriterLock second;
+        std::string lock_error;
+        if (!first.acquire(path.string() + ".lock-test", 100, lock_error)) {
+            std::cerr << "Could not acquire SQLite writer lock fixture: " << lock_error << '\n';
+            return false;
+        }
+        if (second.acquire(path.string() + ".lock-test", 5, lock_error)) {
+            std::cerr << "Concurrent SQLite writer lock was incorrectly granted\n";
+            return false;
+        }
+    }
+    {
+        gittrace::index::WriterLock recovered;
+        std::string lock_error;
+        if (!recovered.acquire(path.string() + ".lock-test", 100, lock_error)) {
+            std::cerr << "SQLite writer lock did not release after owner exit: " << lock_error << '\n';
+            return false;
+        }
+    }
+    std::vector<Chunk> source;
+    Chunk chunk(7, {0.25f, -0.5f, 1.0f}, "int answer() { return 42; }\n",
+                "commit-full-sha", "src/answer.cpp", 3, 3, 1234, "function_definition", 2, 1);
+    GitOccurrence occurrence;
+    occurrence.commit_sha = "commit-full-sha";
+    occurrence.tree_sha = "tree-full-sha";
+    occurrence.filepath = "src/answer.cpp";
+    occurrence.blob_oid = "blob-full-sha";
+    occurrence.commit_time = 1234;
+    occurrence.author_name = "GitTrace Test";
+    occurrence.author_email = "test@example.invalid";
+    chunk.occurrences.push_back(occurrence);
+
+5. GitTrace/gittrace.cpp:371-406  score=0.5318  cosine=0.5318  lineage-adjusted=0.5318  commit=54853ec0c64c73941f5012759110518970add516
+                    identity.push_back('\0');
+                    identity += occurrence.filepath;
+                    cached_chunk_indexes[identity].push_back(i);
+                }
+                if (!incremental_walk) chunks[i].occurrences.clear();
+            }
+            cached_seed_loaded = true;
+            metrics.incremental_update = incremental_walk;
+            std::cout << (incremental_walk
+                ? "Refreshing index from the previous HEAD...\n"
+                : "Rebuilding occurrence map from cached chunks...\n");
+        } else if (!exact_error.empty()) {
+            std::cout << "Index cache miss: " << exact_error << '\n';
+        }
+        metrics.cache_load_ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - cache_started).count();
+    }
+
+    const auto history_started = Clock::now();
+    git_revwalk* walker = nullptr;
+    if (git_revwalk_new(&walker, repo) < 0) {
+        std::cerr << "Could not create commit walker\n";
+        return false;
+    }
+    git_revwalk_push_head(walker);
+    if (incremental_walk) {
+        git_oid old_oid{};
+        if (git_oid_fromstr(&old_oid, prior_head.c_str()) == 0 &&
+            git_revwalk_hide(walker, &old_oid) < 0) {
+            incremental_walk = false;
+            for (Chunk& chunk : chunkdb.getMutableChunks()) chunk.occurrences.clear();
+        }
+    }
+    std::set<std::string> extensions;
+
+    git_oid oid;
+
+Query: What happens when startup finds a compatible saved index in SQLite?
+
+1. GitTrace/chunkdb/index_store.cpp:35-47  score=0.6368  cosine=0.6368  lineage-adjusted=0.6368  commit=54853ec0c64c73941f5012759110518970add516
+bool current_schema(sqlite3* db, std::string& error)
+{
+    sqlite3_stmt* statement = nullptr;
+    if (!prepare(db, "PRAGMA user_version", &statement, error)) return false;
+    const int result = sqlite3_step(statement);
+    const int version = result == SQLITE_ROW ? sqlite3_column_int(statement, 0) : -1;
+    sqlite3_finalize(statement);
+    if (version != 1) {
+        error = "unsupported SQLite index schema version " + std::to_string(version);
+        return false;
+    }
+    return true;
+}
+
+2. test.cpp:157-181  score=0.6255  cosine=0.6255  lineage-adjusted=0.6255  commit=54853ec0c64c73941f5012759110518970add516
+                               &stored_manifest) ||
+        stored_manifest != "config-v1;head=old-head") {
+        std::cerr << "SQLite index did not accept a compatible prior HEAD for refresh\n";
+        return false;
+    }
+    loaded.clear();
+    if (gittrace::index::load(path.string(), "different-config", loaded, error, true)) {
+        std::cerr << "SQLite index accepted incompatible settings for incremental refresh\n";
+        return false;
+    }
+    if (gittrace::index::load(path.string(), "different-manifest", loaded, error)) {
+        std::cerr << "SQLite index accepted a stale manifest\n";
+        return false;
+    }
+    {
+        std::ofstream corrupt(path, std::ios::binary | std::ios::trunc);
+        corrupt << "not a SQLite database";
+    }
+    if (!gittrace::index::save(path.string(), "recovered-manifest", source, error) ||
+        !gittrace::index::load(path.string(), "recovered-manifest", loaded, error)) {
+        std::cerr << "Atomic index replacement did not recover a corrupt database: " << error << '\n';
+        return false;
+    }
+    return true;
+}
+
+3. test.cpp:128-156  score=0.6242  cosine=0.6242  lineage-adjusted=0.6242  commit=54853ec0c64c73941f5012759110518970add516
+    source.push_back(chunk);
+
+    std::string error;
+    if (!gittrace::index::save(path.string(), "config-v1;head=old-head", source, error)) {
+        std::cerr << "Could not save SQLite index fixture: " << error << '\n';
+        return false;
+    }
+    const auto status = gittrace::index::inspect(path.string(), "config-v1;head=old-head");
+    const auto stale_status = gittrace::index::inspect(path.string(), "different-manifest");
+    if (!status.exists || !status.compatible || status.chunks != 1 || stale_status.compatible) {
+        std::cerr << "SQLite index status did not report compatibility correctly\n";
+        return false;
+    }
+    std::vector<Chunk> loaded;
+    if (!gittrace::index::load(path.string(), "config-v1;head=old-head", loaded, error)) {
+        std::cerr << "Could not load SQLite index fixture: " << error << '\n';
+        return false;
+    }
+    if (loaded.size() != 1 || loaded[0].id != 7 || loaded[0].embedding != chunk.embedding ||
+        loaded[0].input != chunk.input || loaded[0].filepath != chunk.filepath ||
+        loaded[0].occurrences.size() != 1 ||
+        loaded[0].occurrences[0].tree_sha != occurrence.tree_sha ||
+        loaded[0].occurrences[0].blob_oid != occurrence.blob_oid) {
+        std::cerr << "SQLite index round trip changed chunk or occurrence data\n";
+        return false;
+    }
+    loaded.clear();
+    std::string stored_manifest;
+    if (!gittrace::index::load(path.string(), "config-v1", loaded, error, true,
+
+4. test_cli.py:127-134  score=0.6156  cosine=0.6156  lineage-adjusted=0.6156  commit=54853ec0c64c73941f5012759110518970add516
+def test_index_status_does_not_build_or_load_the_model(self):
+        with tempfile.TemporaryDirectory(prefix="gittrace-index-status-test-") as temp_dir:
+            repository = self.make_repository(Path(temp_dir))
+            index_path = Path(temp_dir) / "custom-index.sqlite"
+            result = self.run_cli("--repo", repository, "--index-status", "--index", index_path)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("No local index", result.stdout)
+        self.assertIn(str(index_path), result.stdout)
+
+5. test.cpp:93-127  score=0.5620  cosine=0.5620  lineage-adjusted=0.5620  commit=54853ec0c64c73941f5012759110518970add516
+static bool indexStoreRoundTripPass(const fs::path& path)
+{
+    {
+        gittrace::index::WriterLock first;
+        gittrace::index::WriterLock second;
+        std::string lock_error;
+        if (!first.acquire(path.string() + ".lock-test", 100, lock_error)) {
+            std::cerr << "Could not acquire SQLite writer lock fixture: " << lock_error << '\n';
+            return false;
+        }
+        if (second.acquire(path.string() + ".lock-test", 5, lock_error)) {
+            std::cerr << "Concurrent SQLite writer lock was incorrectly granted\n";
+            return false;
+        }
+    }
+    {
+        gittrace::index::WriterLock recovered;
+        std::string lock_error;
+        if (!recovered.acquire(path.string() + ".lock-test", 100, lock_error)) {
+            std::cerr << "SQLite writer lock did not release after owner exit: " << lock_error << '\n';
+            return false;
+        }
+    }
+    std::vector<Chunk> source;
+    Chunk chunk(7, {0.25f, -0.5f, 1.0f}, "int answer() { return 42; }\n",
+                "commit-full-sha", "src/answer.cpp", 3, 3, 1234, "function_definition", 2, 1);
+    GitOccurrence occurrence;
+    occurrence.commit_sha = "commit-full-sha";
+    occurrence.tree_sha = "tree-full-sha";
+    occurrence.filepath = "src/answer.cpp";
+    occurrence.blob_oid = "blob-full-sha";
+    occurrence.commit_time = 1234;
+    occurrence.author_name = "GitTrace Test";
+    occurrence.author_email = "test@example.invalid";
+    chunk.occurrences.push_back(occurrence);
+
+Query: How is a newly written SQLite index swapped into place without exposing a partial file?
+
+1. test.cpp:128-156  score=0.6876  cosine=0.6876  lineage-adjusted=0.6876  commit=54853ec0c64c73941f5012759110518970add516
+    source.push_back(chunk);
+
+    std::string error;
+    if (!gittrace::index::save(path.string(), "config-v1;head=old-head", source, error)) {
+        std::cerr << "Could not save SQLite index fixture: " << error << '\n';
+        return false;
+    }
+    const auto status = gittrace::index::inspect(path.string(), "config-v1;head=old-head");
+    const auto stale_status = gittrace::index::inspect(path.string(), "different-manifest");
+    if (!status.exists || !status.compatible || status.chunks != 1 || stale_status.compatible) {
+        std::cerr << "SQLite index status did not report compatibility correctly\n";
+        return false;
+    }
+    std::vector<Chunk> loaded;
+    if (!gittrace::index::load(path.string(), "config-v1;head=old-head", loaded, error)) {
+        std::cerr << "Could not load SQLite index fixture: " << error << '\n';
+        return false;
+    }
+    if (loaded.size() != 1 || loaded[0].id != 7 || loaded[0].embedding != chunk.embedding ||
+        loaded[0].input != chunk.input || loaded[0].filepath != chunk.filepath ||
+        loaded[0].occurrences.size() != 1 ||
+        loaded[0].occurrences[0].tree_sha != occurrence.tree_sha ||
+        loaded[0].occurrences[0].blob_oid != occurrence.blob_oid) {
+        std::cerr << "SQLite index round trip changed chunk or occurrence data\n";
+        return false;
+    }
+    loaded.clear();
+    std::string stored_manifest;
+    if (!gittrace::index::load(path.string(), "config-v1", loaded, error, true,
+
+2. test.cpp:157-181  score=0.6522  cosine=0.6522  lineage-adjusted=0.6522  commit=54853ec0c64c73941f5012759110518970add516
+                               &stored_manifest) ||
+        stored_manifest != "config-v1;head=old-head") {
+        std::cerr << "SQLite index did not accept a compatible prior HEAD for refresh\n";
+        return false;
+    }
+    loaded.clear();
+    if (gittrace::index::load(path.string(), "different-config", loaded, error, true)) {
+        std::cerr << "SQLite index accepted incompatible settings for incremental refresh\n";
+        return false;
+    }
+    if (gittrace::index::load(path.string(), "different-manifest", loaded, error)) {
+        std::cerr << "SQLite index accepted a stale manifest\n";
+        return false;
+    }
+    {
+        std::ofstream corrupt(path, std::ios::binary | std::ios::trunc);
+        corrupt << "not a SQLite database";
+    }
+    if (!gittrace::index::save(path.string(), "recovered-manifest", source, error) ||
+        !gittrace::index::load(path.string(), "recovered-manifest", loaded, error)) {
+        std::cerr << "Atomic index replacement did not recover a corrupt database: " << error << '\n';
+        return false;
+    }
+    return true;
+}
+
+3. test.cpp:93-127  score=0.6408  cosine=0.6408  lineage-adjusted=0.6408  commit=54853ec0c64c73941f5012759110518970add516
+static bool indexStoreRoundTripPass(const fs::path& path)
+{
+    {
+        gittrace::index::WriterLock first;
+        gittrace::index::WriterLock second;
+        std::string lock_error;
+        if (!first.acquire(path.string() + ".lock-test", 100, lock_error)) {
+            std::cerr << "Could not acquire SQLite writer lock fixture: " << lock_error << '\n';
+            return false;
+        }
+        if (second.acquire(path.string() + ".lock-test", 5, lock_error)) {
+            std::cerr << "Concurrent SQLite writer lock was incorrectly granted\n";
+            return false;
+        }
+    }
+    {
+        gittrace::index::WriterLock recovered;
+        std::string lock_error;
+        if (!recovered.acquire(path.string() + ".lock-test", 100, lock_error)) {
+            std::cerr << "SQLite writer lock did not release after owner exit: " << lock_error << '\n';
+            return false;
+        }
+    }
+    std::vector<Chunk> source;
+    Chunk chunk(7, {0.25f, -0.5f, 1.0f}, "int answer() { return 42; }\n",
+                "commit-full-sha", "src/answer.cpp", 3, 3, 1234, "function_definition", 2, 1);
+    GitOccurrence occurrence;
+    occurrence.commit_sha = "commit-full-sha";
+    occurrence.tree_sha = "tree-full-sha";
+    occurrence.filepath = "src/answer.cpp";
+    occurrence.blob_oid = "blob-full-sha";
+    occurrence.commit_time = 1234;
+    occurrence.author_name = "GitTrace Test";
+    occurrence.author_email = "test@example.invalid";
+    chunk.occurrences.push_back(occurrence);
+
+4. GitTrace/chunkdb/index_store.cpp:91-111  score=0.5945  cosine=0.5945  lineage-adjusted=0.5945  commit=54853ec0c64c73941f5012759110518970add516
+bool WriterLock::acquire(const std::string& index_path, int timeout_ms, std::string& error)
+{
+    const std::filesystem::path lock_path = index_path + ".writer-lock.sqlite";
+    std::error_code ec;
+    if (!lock_path.parent_path().empty())
+        std::filesystem::create_directories(lock_path.parent_path(), ec);
+    if (ec) { error = ec.message(); return false; }
+    if (sqlite3_open_v2(lock_path.string().c_str(), &handle_,
+                        SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr) != SQLITE_OK) {
+        error = handle_ ? sqlite3_errmsg(handle_) : "could not open writer lock";
+        if (handle_) { sqlite3_close(handle_); handle_ = nullptr; }
+        return false;
+    }
+    sqlite3_busy_timeout(handle_, timeout_ms);
+    if (!exec(handle_, "BEGIN IMMEDIATE", error)) {
+        sqlite3_close(handle_);
+        handle_ = nullptr;
+        return false;
+    }
+    return true;
+}
+
+5. GitTrace/chunkdb/index_store.cpp:241-266  score=0.5803  cosine=0.5803  lineage-adjusted=0.5803  commit=54853ec0c64c73941f5012759110518970add516
+static bool write_snapshot(const std::string& path, const std::string& manifest,
+                           const std::vector<Chunk>& chunks, std::string& error)
+{
+    std::error_code filesystem_error;
+    std::filesystem::create_directories(std::filesystem::path(path).parent_path(), filesystem_error);
+    if (filesystem_error) { error = filesystem_error.message(); return false; }
+    Database database;
+    if (sqlite3_open_v2(path.c_str(), &database.handle,
+                        SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr) != SQLITE_OK) {
+        error = database.handle ? sqlite3_errmsg(database.handle) : "could not create SQLite index";
+        return false;
+    }
+    if (!create_schema(database.handle, error) || !exec(database.handle, "BEGIN IMMEDIATE", error)) return false;
+
+    sqlite3_stmt* statement = nullptr;
+    if (!prepare(database.handle, "INSERT OR REPLACE INTO manifest(key,value) VALUES('fingerprint',?)",
+                 &statement, error)) { exec(database.handle, "ROLLBACK", error); return false; }
+    bind_text(statement, 1, manifest);
+    bool ok = sqlite3_step(statement) == SQLITE_DONE;
+    sqlite3_finalize(statement);
+    if (!ok) { error = sqlite3_errmsg(database.handle); exec(database.handle, "ROLLBACK", error); return false; }
+
+    if (!exec(database.handle, "DELETE FROM occurrences; DELETE FROM chunks;", error)) {
+        exec(database.handle, "ROLLBACK", error); return false;
+    }
+    if (!prepare(database.handle,
+
+Query: How does the lexical search lane calculate BM25 scores for query terms?
+
+1. GitTrace/chunkdb/retrieval.cpp:116-146  score=0.7470  cosine=0.7470  lineage-adjusted=0.7470  commit=54853ec0c64c73941f5012759110518970add516
+std::vector<double> bm25Scores(std::string_view query,
+                               const std::vector<std::string>& documents,
+                               bool expand_query_terms)
+{
+    const std::size_t count = documents.size();
+    std::vector<double> scores(count, 0.0);
+    if (count == 0) return scores;
+
+    const auto query_terms = weightedQueryTerms(query, expand_query_terms);
+    std::vector<std::unordered_map<std::string, std::size_t>> frequencies(count);
+    std::vector<std::size_t> document_lengths(count, 0);
+    std::unordered_map<std::string, std::size_t> document_frequency;
+    std::size_t total_length = 0;
+    for (std::size_t i = 0; i < count; ++i) {
+        for (const std::string& term : tokenize(documents[i])) ++frequencies[i][term];
+        document_lengths[i] = std::accumulate(
+            frequencies[i].begin(), frequencies[i].end(), std::size_t{0},
+            [](std::size_t length, const auto& item) { return length + item.second; });
+        total_length += document_lengths[i];
+        for (const auto& [term, frequency] : frequencies[i]) {
+            (void) frequency;
+            ++document_frequency[term];
+        }
+    }
+
+    const double average_length = static_cast<double>(total_length) / count;
+    constexpr double k1 = 1.2;
+    constexpr double b = 0.75;
+    for (const auto& [term, query_weight] : query_terms) {
+        const auto df_it = document_frequency.find(term);
+        if (df_it == document_frequency.end()) continue;
+
+2. GitTrace/chunkdb/chunkdb.cpp:315-345  score=0.7336  cosine=0.7336  lineage-adjusted=0.7336  commit=54853ec0c64c73941f5012759110518970add516
+    // Build a small in-memory BM25 ranking over chunk text and paths, then fuse
+    // it with vector ranks. Reciprocal rank fusion avoids comparing raw cosine
+    // scores directly with BM25 scores.
+    const std::size_t count = matches.size();
+    std::vector<std::size_t> vector_rank(count, 0);
+    if (mode != RetrievalMode::Keyword) {
+        std::vector<std::size_t> vector_order(count);
+        std::iota(vector_order.begin(), vector_order.end(), 0);
+        std::stable_sort(vector_order.begin(), vector_order.end(), [&](std::size_t lhs, std::size_t rhs) {
+            return matches[lhs].similarity > matches[rhs].similarity;
+        });
+        for (std::size_t i = 0; i < count; ++i) vector_rank[vector_order[i]] = i + 1;
+    }
+
+    std::vector<std::string> documents;
+    documents.reserve(count);
+    for (std::size_t i = 0; i < count; ++i) {
+        documents.push_back(chunks[i].input + " " + chunks[i].filepath);
+    }
+    const std::vector<double> lexical_score =
+        gittrace::retrieval::bm25Scores(query, documents, expand_query_terms);
+
+    std::vector<std::size_t> lexical_rank(count, 0);
+    for (std::size_t i = 0; i < count; ++i) {
+        if (lexical_score[i] > 0.0) lexical_rank[i] = i + 1;
+    }
+    std::vector<std::size_t> lexical_order;
+    lexical_order.reserve(count);
+    for (std::size_t i = 0; i < count; ++i) {
+        if (lexical_score[i] > 0.0) lexical_order.push_back(i);
+    }
+
+3. GitTrace/chunkdb/retrieval.cpp:147-160  score=0.6448  cosine=0.6448  lineage-adjusted=0.6448  commit=54853ec0c64c73941f5012759110518970add516
+        const double df = static_cast<double>(df_it->second);
+        const double idf = std::log(1.0 + (static_cast<double>(count) - df + 0.5) / (df + 0.5));
+        for (std::size_t i = 0; i < count; ++i) {
+            const auto tf_it = frequencies[i].find(term);
+            if (tf_it == frequencies[i].end()) continue;
+            const double tf = static_cast<double>(tf_it->second);
+            const double length_ratio = average_length == 0.0
+                ? 0.0 : static_cast<double>(document_lengths[i]) / average_length;
+            scores[i] += query_weight * idf * (tf * (k1 + 1.0)) /
+                (tf + k1 * (1.0 - b + b * length_ratio));
+        }
+    }
+    return scores;
+}
+
+4. GitTrace/chunkdb/retrieval.cpp:45-70  score=0.6403  cosine=0.6403  lineage-adjusted=0.6403  commit=54853ec0c64c73941f5012759110518970add516
+std::unordered_map<std::string, double> weightedQueryTerms(
+    std::string_view query, bool expand_query_terms)
+{
+    std::unordered_map<std::string, double> weighted;
+    const std::vector<std::string> terms = gittrace::retrieval::tokenize(query);
+    for (const std::string& term : terms) weighted[term] = 1.0;
+    if (!expand_query_terms) return weighted;
+
+    static const std::unordered_map<std::string, std::vector<std::pair<std::string, double>>> expansions = {
+        {"calculation", {{"formula", 0.45}, {"score", 0.35}}},
+        {"downweight", {{"decay", 0.65}, {"penalty", 0.4}}},
+        {"older", {{"historical", 0.5}, {"previous", 0.45}}},
+        {"revision", {{"commit", 0.45}, {"history", 0.4}}},
+        {"ignore", {{"exclude", 0.45}, {"skip", 0.45}}},
+        {"rule", {{"pattern", 0.35}, {"filter", 0.35}}},
+        {"apply", {{"check", 0.3}}},
+        {"throughout", {{"across", 0.35}, {"recursive", 0.35}}},
+        {"walk", {{"tree", 0.4}, {"traversal", 0.45}, {"recursive", 0.35}}},
+        {"override", {{"injection", 0.5}, {"untrusted", 0.4}}},
+        {"instruction", {{"prompt", 0.6}, {"policy", 0.35}}},
+        {"snippet", {{"chunk", 0.55}, {"candidate", 0.3}}},
+        {"rerank", {{"reranker", 0.55}, {"relevance", 0.4}}},
+        {"reranker", {{"relevance", 0.5}}},
+        {"cannot", {{"unavailable", 0.35}, {"timeout", 0.35}}},
+        {"reach", {{"available", 0.35}, {"timeout", 0.35}}},
+        {"display", {{"show", 0.4}, {"print", 0.35}, {"output", 0.35}}}
+
+5. test.cpp:64-91  score=0.6190  cosine=0.6190  lineage-adjusted=0.6190  commit=54853ec0c64c73941f5012759110518970add516
+            "Warning: could not reach the reranker. Showing vector results without reranking.",
+            false
+        }
+    };
+
+    const std::vector<std::string> distractors = {
+        "Parse command line arguments, print usage, and initialize the repository scanner.",
+        "A generic helper iterates over values and returns the first matching entry."
+    };
+    for (const Fixture& fixture : fixtures) {
+        const std::vector<std::string> documents = {fixture.target, distractors[0], distractors[1]};
+        const std::vector<double> baseline =
+            gittrace::retrieval::bm25Scores(fixture.query, documents, false);
+        const std::vector<double> expanded =
+            gittrace::retrieval::bm25Scores(fixture.query, documents, true);
+        if (expanded[0] <= expanded[1] || expanded[0] <= expanded[2]) {
+            std::cerr << "Keyword fixture failed to rank target first for query: "
+                      << fixture.query << '\n';
+            return false;
+        }
+        if (fixture.expect_expansion_gain && expanded[0] <= baseline[0]) {
+            std::cerr << "Query expansion did not improve its lexical fixture for query: "
+                      << fixture.query << '\n';
+            return false;
+        }
+    }
+    return true;
+}
+
+Query: How does hybrid retrieval combine the vector ranking with the keyword ranking?
+
+1. GitTrace/chunkdb/chunkdb.cpp:315-345  score=0.7009  cosine=0.7009  lineage-adjusted=0.7009  commit=54853ec0c64c73941f5012759110518970add516
+    // Build a small in-memory BM25 ranking over chunk text and paths, then fuse
+    // it with vector ranks. Reciprocal rank fusion avoids comparing raw cosine
+    // scores directly with BM25 scores.
+    const std::size_t count = matches.size();
+    std::vector<std::size_t> vector_rank(count, 0);
+    if (mode != RetrievalMode::Keyword) {
+        std::vector<std::size_t> vector_order(count);
+        std::iota(vector_order.begin(), vector_order.end(), 0);
+        std::stable_sort(vector_order.begin(), vector_order.end(), [&](std::size_t lhs, std::size_t rhs) {
+            return matches[lhs].similarity > matches[rhs].similarity;
+        });
+        for (std::size_t i = 0; i < count; ++i) vector_rank[vector_order[i]] = i + 1;
+    }
+
+    std::vector<std::string> documents;
+    documents.reserve(count);
+    for (std::size_t i = 0; i < count; ++i) {
+        documents.push_back(chunks[i].input + " " + chunks[i].filepath);
+    }
+    const std::vector<double> lexical_score =
+        gittrace::retrieval::bm25Scores(query, documents, expand_query_terms);
+
+    std::vector<std::size_t> lexical_rank(count, 0);
+    for (std::size_t i = 0; i < count; ++i) {
+        if (lexical_score[i] > 0.0) lexical_rank[i] = i + 1;
+    }
+    std::vector<std::size_t> lexical_order;
+    lexical_order.reserve(count);
+    for (std::size_t i = 0; i < count; ++i) {
+        if (lexical_score[i] > 0.0) lexical_order.push_back(i);
+    }
+
+2. GitTrace/chunkdb/chunkdb.cpp:346-377  score=0.6578  cosine=0.6578  lineage-adjusted=0.6578  commit=54853ec0c64c73941f5012759110518970add516
+    std::stable_sort(lexical_order.begin(), lexical_order.end(), [&](std::size_t lhs, std::size_t rhs) {
+        return lexical_score[lhs] > lexical_score[rhs];
+    });
+    std::fill(lexical_rank.begin(), lexical_rank.end(), 0);
+    for (std::size_t i = 0; i < lexical_order.size(); ++i) lexical_rank[lexical_order[i]] = i + 1;
+
+    if (mode == RetrievalMode::Keyword) {
+        for (std::size_t i = 0; i < count; ++i) {
+            matches[i].retrieval_score = static_cast<float>(lexical_score[i]);
+        }
+    } else if (mode == RetrievalMode::Vector) {
+        for (ChunkMatch& match : matches) match.retrieval_score = match.similarity;
+    } else {
+        constexpr double rrf_constant = 60.0;
+        for (std::size_t i = 0; i < count; ++i) {
+            double fused = 1.0 / (rrf_constant + static_cast<double>(vector_rank[i]));
+            if (lexical_rank[i] != 0) {
+                fused += 1.0 / (rrf_constant + static_cast<double>(lexical_rank[i]));
+            }
+            matches[i].retrieval_score = static_cast<float>(fused);
+        }
+    }
+
+    if (mode == RetrievalMode::Keyword) {
+        matches.erase(std::remove_if(matches.begin(), matches.end(), [](const ChunkMatch& match) {
+            return match.retrieval_score <= 0.0f;
+        }), matches.end());
+    }
+
+    std::stable_sort(matches.begin(), matches.end(), [](const ChunkMatch& lhs, const ChunkMatch& rhs) {
+        return lhs.retrieval_score > rhs.retrieval_score;
+    });
+
+3. GitTrace/chunkdb/chunkdb.h:46-48  score=0.5862  cosine=0.5862  lineage-adjusted=0.5862  commit=d77c3ccebcd22970ed4b21c58d35a810b60fa72b
+    std::vector<Chunk*> getSimilarChunks(const std::vector<float>& embedding, uint8_t k = 3);
+    std::vector<ChunkMatch> search(const std::string& query, std::size_t k = 5);
+}
+
+4. GitTrace/chunkdb/chunkdb.cpp:147-175  score=0.5398  cosine=0.5398  lineage-adjusted=0.5398  commit=e2db25d8eb0fc8f3ea9263a531b2e72184eb11ae
+std::vector<Chunk*> ChunkDB::getSimilarChunks(const std::vector<float>& embedding, uint8_t k)
+{
+    struct ScoredChunk
+    {
+        Chunk* chunk;
+        float score;
+    };
+
+    std::vector<ScoredChunk> scored;
+    scored.reserve(chunks.size());
+    for(Chunk& chunk : chunks)
+    {
+        scored.push_back({&chunk, cosineSimilarity(embedding, chunk.embedding)});
+    }
+
+    std::sort(scored.begin(), scored.end(), [](const ScoredChunk& lhs, const ScoredChunk& rhs)
+    {
+        return lhs.score > rhs.score;
+    });
+
+    const std::size_t count = std::min<std::size_t>(k, scored.size());
+    std::vector<Chunk*> results;
+    results.reserve(count);
+    for(std::size_t i = 0; i < count; ++i)
+    {
+        results.push_back(scored[i].chunk);
+    }
+    return results;
+}
+
+5. GitTrace/chunkdb/retrieval.cpp:116-146  score=0.5355  cosine=0.5355  lineage-adjusted=0.5355  commit=54853ec0c64c73941f5012759110518970add516
+std::vector<double> bm25Scores(std::string_view query,
+                               const std::vector<std::string>& documents,
+                               bool expand_query_terms)
+{
+    const std::size_t count = documents.size();
+    std::vector<double> scores(count, 0.0);
+    if (count == 0) return scores;
+
+    const auto query_terms = weightedQueryTerms(query, expand_query_terms);
+    std::vector<std::unordered_map<std::string, std::size_t>> frequencies(count);
+    std::vector<std::size_t> document_lengths(count, 0);
+    std::unordered_map<std::string, std::size_t> document_frequency;
+    std::size_t total_length = 0;
+    for (std::size_t i = 0; i < count; ++i) {
+        for (const std::string& term : tokenize(documents[i])) ++frequencies[i][term];
+        document_lengths[i] = std::accumulate(
+            frequencies[i].begin(), frequencies[i].end(), std::size_t{0},
+            [](std::size_t length, const auto& item) { return length + item.second; });
+        total_length += document_lengths[i];
+        for (const auto& [term, frequency] : frequencies[i]) {
+            (void) frequency;
+            ++document_frequency[term];
+        }
+    }
+
+    const double average_length = static_cast<double>(total_length) / count;
+    constexpr double k1 = 1.2;
+    constexpr double b = 0.75;
+    for (const auto& [term, query_weight] : query_terms) {
+        const auto df_it = document_frequency.find(term);
+        if (df_it == document_frequency.end()) continue;
+
+Query: If the relevance service is unreachable, what results does the command-line tool show?
+
+1. main.cc:109-131  score=0.5626  cosine=0.5626  lineage-adjusted=0.5626  commit=7c1352366b18c9a85aa07e624cffa11e43b1cd1b
+                          << " candidates as relevant.\n";
+                if (accepted == 0) {
+                    std::cout << "No chunks passed Laya's relevance filter.\n";
+                    continue;
+                }
+                std::size_t rank = 0;
+                for (const LayaMatch& match : reranked) {
+                    if (!match.accepted) continue;
+                    print_match(match.match, ++rank, &match);
+                    if (rank == top_k) break;
+                }
+                continue;
+            }
+            std::cerr << "Warning: could not reach Laya at " << laya_url
+                      << " (" << error << "). Showing vector results without reranking.\n";
+        }
+
+        for (std::size_t i = 0; i < std::min(top_k, matches.size()); ++i) {
+            print_match(matches[i], i + 1);
+        }
+    }
+    std::cout << "Leaving interactive search.\n";
+}
+
+2. test.cpp:64-91  score=0.5528  cosine=0.5528  lineage-adjusted=0.5528  commit=54853ec0c64c73941f5012759110518970add516
+            "Warning: could not reach the reranker. Showing vector results without reranking.",
+            false
+        }
+    };
+
+    const std::vector<std::string> distractors = {
+        "Parse command line arguments, print usage, and initialize the repository scanner.",
+        "A generic helper iterates over values and returns the first matching entry."
+    };
+    for (const Fixture& fixture : fixtures) {
+        const std::vector<std::string> documents = {fixture.target, distractors[0], distractors[1]};
+        const std::vector<double> baseline =
+            gittrace::retrieval::bm25Scores(fixture.query, documents, false);
+        const std::vector<double> expanded =
+            gittrace::retrieval::bm25Scores(fixture.query, documents, true);
+        if (expanded[0] <= expanded[1] || expanded[0] <= expanded[2]) {
+            std::cerr << "Keyword fixture failed to rank target first for query: "
+                      << fixture.query << '\n';
+            return false;
+        }
+        if (fixture.expect_expansion_gain && expanded[0] <= baseline[0]) {
+            std::cerr << "Query expansion did not improve its lexical fixture for query: "
+                      << fixture.query << '\n';
+            return false;
+        }
+    }
+    return true;
+}
+
+3. main.cc:16-32  score=0.5346  cosine=0.5346  lineage-adjusted=0.5346  commit=7c1352366b18c9a85aa07e624cffa11e43b1cd1b
+void print_usage(const char* program)
+{
+    std::cout << "Usage: " << program << " [options] [repository-path]\n"
+              << "\nOptions:\n"
+              << "  -r, --repo PATH      Repository to scan (default: current directory)\n"
+              << "      --no-embeddings  Skip model loading and embedding generation\n"
+              << "      --list           Print each unique file version found\n"
+              << "      --top-k N        Number of similar chunks per query (default: 5)\n"
+              << "      --laya-url URL   Laya reranker URL (default: http://127.0.0.1:8787/rerank)\n"
+              << "      --no-laya        Show vector results without Laya reranking\n"
+              << "      --no-interactive  Finish after indexing without starting the query prompt\n"
+              << "  -h, --help           Show this help\n"
+              << "\nExamples:\n"
+              << "  " << program << " --repo /path/to/project --top-k 8\n"
+              << "  " << program << " --repo /path/to/project --no-embeddings --list\n"
+              << "  " << program << " /path/to/project\n";
+}
+
+4. main.cc:398-436  score=0.4867  cosine=0.4867  lineage-adjusted=0.4867  commit=54853ec0c64c73941f5012759110518970add516
+            use_retrieval_instruction = std::string(argv[++i]) == "instructed";
+            continue;
+        }
+        if (arg == "--retrieval-mode") {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: --retrieval-mode requires vector, keyword, or hybrid.\n";
+                return 2;
+            }
+            const std::string mode = argv[++i];
+            if (mode == "vector") retrieval_mode = RetrievalMode::Vector;
+            else if (mode == "keyword") retrieval_mode = RetrievalMode::Keyword;
+            else if (mode == "hybrid") retrieval_mode = RetrievalMode::Hybrid;
+            else {
+                std::cerr << "Error: --retrieval-mode must be vector, keyword, or hybrid.\n";
+                return 2;
+            }
+            continue;
+        }
+        if (arg == "--query-expansion") {
+            expand_query_terms = true;
+            continue;
+        }
+        if (arg == "--query") {
+            if (i + 1 >= argc || argv[i + 1][0] == '\0') {
+                std::cerr << "Error: --query requires non-empty text.\n";
+                return 2;
+            }
+            queries.emplace_back(argv[++i]);
+            continue;
+        }
+        if (arg == "--profile") {
+            if (i + 1 >= argc || argv[i + 1][0] == '\0') {
+                std::cerr << "Error: --profile requires a file path.\n";
+                return 2;
+            }
+            profile_path = argv[++i];
+            continue;
+        }
+        if (arg == "--laya-url") {
+
+5. main.cc:108-131  score=0.4769  cosine=0.5377  lineage-adjusted=0.4769  commit=0674f66369180839f1a13e6878b2d9dfdd8f9cdc
+                std::cout << "Reranker accepted " << accepted << '/' << reranked.size()
+                          << " candidates as relevant.\n";
+                if (accepted == 0) {
+                    std::cout << "No chunks passed the relevance filter.\n";
+                    continue;
+                }
+                std::size_t rank = 0;
+                for (const LayaMatch& match : reranked) {
+                    if (!match.accepted) continue;
+                    print_match(match.match, ++rank, &match);
+                    if (rank == top_k) break;
+                }
+                continue;
+            }
+            std::cerr << "Warning: could not reach the reranker at " << laya_url
+                      << " (" << error << "). Showing vector results without reranking.\n";
+        }
+
+        for (std::size_t i = 0; i < std::min(top_k, matches.size()); ++i) {
+            print_match(matches[i], i + 1);
+        }
+    }
+    std::cout << "Leaving interactive search.\n";
+}
+Embedding backend: automatic device selection (4 threads).

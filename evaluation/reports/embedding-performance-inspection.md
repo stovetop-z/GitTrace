@@ -12,6 +12,10 @@ The run processed 224 chunks, averaging **19.4 seconds per embedding call**. Par
 
 Follow-up testing isolated the execution-environment issue: the sandbox cannot access Metal, but the host can. A Release build in the host context offloaded all model layers and completed the same 224-chunk cold index in **47.5 s of embedding time** (about 56 s across profiled stages). The README now recommends Release for normal builds.
 
+## Follow-up: smaller embedding model
+
+GitTrace now defaults to `jina-embeddings-v2-base-code` in Q4_K_M GGUF form, with mean pooling. A PyTorch MPS run encoded 1,135 Python chunks at 16.22 chunks/second. On 18 labeled questions, vector-only retrieval scored P@5 0.233, Recall@5 0.722, and MRR 0.415. A one-chunk C++ smoke run successfully indexed and retrieved the expected snippet, but used CPU fallback and is not a throughput measurement. These results support trying the smaller model as the default, but do not establish a speed or quality win over BGE: BGE's PyTorch runs were incomplete, the Python and C++ chunkers differ, and the benchmark is small. See [`../benchmark/pytorch-index-results.md`](../benchmark/pytorch-index-results.md) for data and limits.
+
 ## Evidence
 
 ### Cold run profile
@@ -89,9 +93,9 @@ The host run executed one retrieval query after indexing, but this was not a ret
 ## Recommended next steps
 
 1. **Use the right runtime/build.** README build instructions now configure Release. Run GitTrace from a host terminal when GPU access is available; the sandbox used for the slow run cannot see Metal, while the host can.
-2. **Benchmark batching if larger repositories need more speed.** A 47-second GPU cold index for this 224-chunk workload may be adequate. Compare batched embedding on a fixed sample of actual corpus chunks before changing the default.
+2. **Measure the bounded batching implementation.** GitTrace sends up to four independent chunk sequences per model call, constrained by the token batch. Decoder models use `llama_decode`; encoder models use `llama_encode` and set `n_ubatch` to the configured token batch. Profiles distinguish `embedding_inputs` from `embedding_model_calls` and include failed inputs.
 3. **Make cold builds resumable for much larger repositories.** Checkpointing is less urgent for this workload but remains useful if real repositories take many minutes.
-4. **Treat smaller models and CPU thread tuning as fallback work.** First use host Metal/Release behavior. If a user has no GPU access or still needs faster indexing, compare thread counts and smaller models against retrieval scenarios before changing defaults.
+4. **Compare the new default against the old model under controlled conditions.** Index the same fixed corpus with BGE and Jina using the same C++ build, backend, chunk boundaries, and batch settings; then run the same labeled queries and report throughput, P@5, Recall@5, and MRR. Keep the current Jina results labeled exploratory until that comparison is complete.
 
 The progress/backend changes built in both Debug and Release. Release CTest passed 2/2 tests. The 11-chunk progress smoke run visibly reported progress and completed with the expected CPU fallback/thread metadata.
 

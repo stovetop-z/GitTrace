@@ -28,13 +28,13 @@ endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-# libgit2's build/cmake directory contains a package config, but not the
-# complete installed export set required by that config. Point CMake at the
-# installation prefix instead. Override this when libgit2 is installed
-# elsewhere, for example: -DLIBGIT2_ROOT=/path/to/libgit2-install
-set(LIBGIT2_ROOT "/Users/stovetop/lib/libgit2-install" CACHE PATH
+# libgit2 must be installed with its CMake package config. Set this prefix
+# only when it is outside the system's normal package search paths.
+set(LIBGIT2_ROOT "" CACHE PATH
     "libgit2 installation prefix")
-list(PREPEND CMAKE_PREFIX_PATH "${LIBGIT2_ROOT}")
+if(LIBGIT2_ROOT)
+    list(PREPEND CMAKE_PREFIX_PATH "${LIBGIT2_ROOT}")
+endif()
 
 # Enable compile_commands.json generation for VS Code
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

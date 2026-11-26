@@ -90,7 +90,7 @@ void print_usage(const char* program)
               << "      --no-embeddings  Skip model loading and embedding generation\n"
               << "      --list           Print each unique file version found\n"
               << "      --top-k N        Number of similar chunks per query (default: 5)\n"
-              << "      --query-format F Embedding format: instructed (default) or raw\n"
+              << "      --query-format F Embedding format: raw (default) or instructed\n"
               << "      --retrieval-mode M Search with vector, keyword, or hybrid (default)\n"
               << "      --query-expansion  Add weighted code-search synonyms (default: off)\n"
               << "      --query TEXT     Run one query after indexing; may be repeated\n"
@@ -98,6 +98,7 @@ void print_usage(const char* program)
               << "      --rebuild-index  Ignore and replace the local cached index\n"
               << "      --index-status   Show whether the local index matches current inputs\n"
               << "      --index PATH     Set SQLite index file (default: REPO/.gittrace/index.sqlite)\n"
+              << "      --embedding-model PATH  Select GGUF embedding model\n"
               << "      --laya-url URL   Laya reranker URL (default: http://127.0.0.1:8787/rerank)\n"
               << "      --no-laya        Show retrieval results without reranking\n"
               << "      --no-interactive  Finish after indexing without starting the query prompt\n"
@@ -296,7 +297,11 @@ bool write_profile(const std::string& path, const std::string& repository,
         << "  \"parsed_files\": " << metrics.parsed_files << ",\n"
         << "  \"failed_files\": " << metrics.failed_files << ",\n"
         << "  \"chunks_created\": " << metrics.chunks_created << ",\n"
-        << "  \"embedding_calls\": " << metrics.embedding_calls << ",\n"
+        << "  \"embedding_model_path\": \"" << json_escape(metrics.embedding_model_path) << "\",\n"
+        << "  \"embedding_pooling_type\": " << metrics.embedding_pooling_type << ",\n"
+        << "  \"embedding_inputs\": " << metrics.embedding_inputs << ",\n"
+        << "  \"embedding_model_calls\": " << metrics.embedding_model_calls << ",\n"
+        << "  \"embedding_failures\": " << metrics.embedding_failures << ",\n"
         << "  \"search_calls\": " << metrics.search_calls << ",\n"
         << "  \"query_total_ms\": [";
     for (std::size_t i = 0; i < query_timings.size(); ++i) {
@@ -316,7 +321,7 @@ int main(int argc, char* argv[])
     bool list_blobs = false;
     bool interactive_enabled = true;
     bool use_laya = true;
-    bool use_retrieval_instruction = true;
+    bool use_retrieval_instruction = false;
     bool rebuild_index = false;
     bool index_status_requested = false;
     RetrievalMode retrieval_mode = RetrievalMode::Hybrid;
@@ -325,6 +330,10 @@ int main(int argc, char* argv[])
     std::vector<std::string> queries;
     std::string profile_path;
     std::string index_path;
+    const char* configured_model_path = std::getenv("GITTRACE_EMBEDDING_MODEL");
+    std::string embedding_model_path = configured_model_path && *configured_model_path
+        ? configured_model_path
+        : "GitTrace/chunkdb/embedder/jina-embeddings-v2-base-code-Q4_K_M.gguf";
     const char* configured_laya_url = std::getenv("GITTRACE_LAYA_URL");
     std::string laya_url = configured_laya_url && *configured_laya_url
         ? configured_laya_url : "http://127.0.0.1:8787/rerank";
@@ -383,6 +392,14 @@ int main(int argc, char* argv[])
                 return 2;
             }
             index_path = argv[++i];
+            continue;
+        }
+        if (arg == "--embedding-model") {
+            if (i + 1 >= argc || argv[i + 1][0] == '\0') {
+                std::cerr << "Error: --embedding-model requires a GGUF file path.\n";
+                return 2;
+            }
+            embedding_model_path = argv[++i];
             continue;
         }
         if (arg == "--no-laya") {
@@ -476,6 +493,7 @@ int main(int argc, char* argv[])
     std::cout << "Opening repository: " << normalized_path.string() << '\n';
 
     GitTrace trace;
+    trace.setEmbeddingModel(embedding_model_path);
     const auto init_started = std::chrono::steady_clock::now();
     if (!trace.init(normalized_path.string().c_str(), embeddings_enabled)) {
         std::cerr << "Failed to initialize GitTrace. Check the repository path";
@@ -505,7 +523,9 @@ int main(int argc, char* argv[])
         std::ostringstream line;
         line << '\r' << (progress.complete ? "Embedding complete: " : "Embedding: ")
              << progress.chunks_completed << " chunks from "
-             << progress.embedding_attempts << " calls"
+             << progress.embedding_inputs << " inputs in "
+             << progress.embedding_model_calls << " model calls"
+             << " | failures " << progress.embedding_failures
              << " | " << std::fixed << std::setprecision(1) << chunks_per_second
              << " chunks/s | " << std::setprecision(1) << elapsed_seconds << " s";
         if (progress.complete) line << '\n';
@@ -515,6 +535,11 @@ int main(int argc, char* argv[])
     });
     if (!trace.beginGitTrace(!list_blobs, rebuild_index)) {
         restore_console_output();
+        if (!profile_path.empty() &&
+            !write_profile(profile_path, normalized_path.string(), init_ms,
+                           trace.getMetrics(), query_timings_ms)) {
+            std::cerr << "Could not write profile output to " << profile_path << ".\n";
+        }
         std::cerr << "GitTrace could not build or load the index; see dev.log for details.\n";
         return 1;
     }

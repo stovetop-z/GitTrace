@@ -1,0 +1,6 @@
+sentence-transformers>=5.0,<6
+transformers>=4.41,<5
+tokenizers>=0.22,<0.23.1
+huggingface-hub>=0.34,<1
+torch>=2.5
+numpy>=2.0

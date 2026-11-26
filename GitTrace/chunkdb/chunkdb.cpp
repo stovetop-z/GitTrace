@@ -7,6 +7,12 @@
 #include <limits>
 #include <numeric>
 #include <tuple>
+#include <utility>
+
+namespace {
+constexpr uint32_t kEmbeddingBatchSequences = 4;
+constexpr uint32_t kEmbeddingSequenceContext = 2048;
+}
 
 ChunkDB::ChunkDB() : curr_seq_id(0) {}
 
@@ -21,9 +27,15 @@ bool ChunkDB::init()
 {
     if (ctx != nullptr && model != nullptr && vcb != nullptr) return true;
     llama_backend_init();
-    cparams = llama_context_default_params();
-    cparams.embeddings = true;
-    cparams.n_ctx = 2048;
+    auto configure_context = [&](uint32_t sequence_count) {
+        cparams = llama_context_default_params();
+        cparams.embeddings = true;
+        cparams.pooling_type = LLAMA_POOLING_TYPE_UNSPECIFIED;
+        cparams.n_ubatch = cparams.n_batch;
+        cparams.n_ctx = kEmbeddingSequenceContext * sequence_count;
+        cparams.n_seq_max = sequence_count;
+    };
+    configure_context(kEmbeddingBatchSequences);
 
     ggml_backend_dev_t cpu_devices[] = {
         ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU),
@@ -33,7 +45,7 @@ bool ChunkDB::init()
         mparams = llama_model_default_params();
         mparams.n_gpu_layers = gpu_layers;
         if (cpu_only) mparams.devices = cpu_devices;
-        model = llama_model_load_from_file(model_path, mparams);
+        model = llama_model_load_from_file(model_path.c_str(), mparams);
         if (model == nullptr) return false;
 
         vcb = llama_model_get_vocab(model);
@@ -47,15 +59,28 @@ bool ChunkDB::init()
     };
 
     if (load_model(-1, false)) {
+        active_embedding_sequences = kEmbeddingBatchSequences;
         backend_name = "automatic device selection";
         return true;
     }
 
     std::cerr << "Warning: GPU model initialization failed; retrying with CPU only.\n";
     if (cpu_devices[0] != nullptr && load_model(0, true)) {
+        active_embedding_sequences = kEmbeddingBatchSequences;
         backend_name = "CPU fallback";
         std::cerr << "Loaded embedding model with CPU backend.\n";
         return true;
+    }
+
+    if (cpu_devices[0] != nullptr) {
+        std::cerr << "Warning: four-sequence context initialization failed; retrying single-sequence mode.\n";
+        configure_context(1);
+        if (load_model(0, true)) {
+            active_embedding_sequences = 1;
+            backend_name = "CPU fallback (single sequence)";
+            std::cerr << "Loaded embedding model with CPU backend in single-sequence mode.\n";
+            return true;
+        }
     }
 
     std::cerr << "Error: failed to initialize embedding model at " << model_path << '\n';
@@ -117,17 +142,18 @@ std::vector<float> ChunkDB::embed(const std::string& input, bool add_special, bo
     llama_memory_clear(llama_get_memory(ctx), true);
     llama_batch batch = llama_batch_get_one(
         const_cast<llama_token*>(tokens.data()), static_cast<int32_t>(tokens.size()));
-    if(llama_decode(ctx, batch) != 0)
+    const int eval_status = llama_get_causal_attn(ctx)
+        ? llama_decode(ctx, batch)
+        : llama_encode(ctx, batch);
+    if(eval_status != 0)
     {
         std::cerr << "Error: failed to evaluate input\n";
         return {};
     }
 
-    float* values = llama_get_embeddings_seq(ctx, 0);
-    if(values == nullptr)
-    {
-        values = llama_get_embeddings_ith(ctx, batch.n_tokens - 1);
-    }
+    float* values = llama_pooling_type(ctx) == LLAMA_POOLING_TYPE_NONE
+        ? llama_get_embeddings_ith(ctx, batch.n_tokens - 1)
+        : llama_get_embeddings_seq(ctx, 0);
     if(values == nullptr)
     {
         std::cerr << "Error: model did not return an embedding\n";
@@ -142,6 +168,126 @@ std::vector<float> ChunkDB::embed(const std::string& input, bool add_special, bo
                  commit_time, syntax_type, lineage_depth, syntax_ordinal, occurrences);
     }
     return embedding;
+}
+
+ChunkBatchResult ChunkDB::embedBatch(const std::vector<ChunkEmbeddingInput>& inputs)
+{
+    ChunkBatchResult result;
+    if (inputs.empty()) return result;
+    if ((ctx == nullptr || model == nullptr || vcb == nullptr) && !init()) return result;
+    auto embed_individually = [&](const ChunkEmbeddingInput& input) {
+        ++result.model_calls;
+        const auto embedding = embed(input.input, true, true, input.commit_sha,
+            input.filepath, input.start_line, input.end_line, input.commit_time,
+            input.syntax_type, input.lineage_depth, input.syntax_ordinal,
+            input.occurrences);
+        if (!embedding.empty()) ++result.embedded_chunks;
+        else ++result.failed_chunks;
+    };
+
+    struct TokenizedInput {
+        std::size_t input_index;
+        std::vector<llama_token> tokens;
+    };
+    std::vector<TokenizedInput> tokenized;
+    tokenized.reserve(inputs.size());
+    for (std::size_t i = 0; i < inputs.size(); ++i) {
+        auto tokens = tokenize(inputs[i].input, true);
+        if (tokens.empty()) {
+            ++result.failed_chunks;
+            std::cerr << "Warning: could not tokenize chunk in " << inputs[i].filepath
+                      << ':' << inputs[i].start_line << '-' << inputs[i].end_line << '\n';
+            continue;
+        }
+        tokenized.push_back({i, std::move(tokens)});
+    }
+
+    const uint32_t n_batch = llama_n_batch(ctx);
+    if (n_batch == 0) {
+        for (const auto& item : tokenized) embed_individually(inputs[item.input_index]);
+        return result;
+    }
+    llama_batch batch = llama_batch_init(static_cast<int32_t>(n_batch), 0, 1);
+    if (batch.token == nullptr || batch.pos == nullptr || batch.n_seq_id == nullptr ||
+        batch.seq_id == nullptr || batch.logits == nullptr) {
+        llama_batch_free(batch);
+        for (const auto& item : tokenized) embed_individually(inputs[item.input_index]);
+        return result;
+    }
+
+    std::size_t cursor = 0;
+    while (cursor < tokenized.size()) {
+        std::vector<std::size_t> selected;
+        selected.reserve(active_embedding_sequences);
+        uint32_t token_count = 0;
+
+        while (cursor < tokenized.size() && selected.size() < active_embedding_sequences) {
+            const uint32_t input_tokens = static_cast<uint32_t>(tokenized[cursor].tokens.size());
+            if (input_tokens > n_batch) {
+                // Preserve the single-input path for oversized chunks so its existing
+                // context-limit behavior remains the same.
+                const auto& input = inputs[tokenized[cursor].input_index];
+                embed_individually(input);
+                ++cursor;
+                continue;
+            }
+            if (!selected.empty() && token_count + input_tokens > n_batch) break;
+            selected.push_back(cursor);
+            token_count += input_tokens;
+            ++cursor;
+        }
+        if (selected.empty()) continue;
+
+        batch.n_tokens = 0;
+        std::vector<int32_t> last_token_positions;
+        last_token_positions.reserve(selected.size());
+        for (std::size_t sequence = 0; sequence < selected.size(); ++sequence) {
+            const auto& tokens = tokenized[selected[sequence]].tokens;
+            for (std::size_t position = 0; position < tokens.size(); ++position) {
+                const int32_t batch_position = batch.n_tokens++;
+                batch.token[batch_position] = tokens[position];
+                batch.pos[batch_position] = static_cast<llama_pos>(position);
+                batch.n_seq_id[batch_position] = 1;
+                batch.seq_id[batch_position][0] = static_cast<llama_seq_id>(sequence);
+                batch.logits[batch_position] = 1;
+                if (position + 1 == tokens.size()) last_token_positions.push_back(batch_position);
+            }
+        }
+
+        llama_memory_clear(llama_get_memory(ctx), true);
+        ++result.model_calls;
+        const int eval_status = llama_get_causal_attn(ctx)
+            ? llama_decode(ctx, batch)
+            : llama_encode(ctx, batch);
+        if (eval_status != 0) {
+            std::cerr << "Warning: batched embedding failed; retrying its chunks individually.\n";
+            for (const std::size_t job_index : selected) {
+                embed_individually(inputs[tokenized[job_index].input_index]);
+            }
+            continue;
+        }
+
+        const int32_t dimension = llama_model_n_embd(model);
+        for (std::size_t sequence = 0; sequence < selected.size(); ++sequence) {
+            float* values = llama_pooling_type(ctx) == LLAMA_POOLING_TYPE_NONE
+                ? llama_get_embeddings_ith(ctx, last_token_positions[sequence])
+                : llama_get_embeddings_seq(ctx, static_cast<llama_seq_id>(sequence));
+            if (values == nullptr) {
+                embed_individually(inputs[tokenized[selected[sequence]].input_index]);
+                continue;
+            }
+
+            const std::vector<float> embedding(values, values + dimension);
+            const auto& input = inputs[tokenized[selected[sequence]].input_index];
+            chunkify(embedding, input.input, input.commit_sha, input.filepath,
+                     input.start_line, input.end_line, input.commit_time, input.syntax_type,
+                     input.lineage_depth, input.syntax_ordinal, input.occurrences);
+            ++result.embedded_chunks;
+        }
+    }
+
+    llama_batch_free(batch);
+    return result;
 }
 
 void ChunkDB::chunkify(const std::vector<float>& embedding, const std::string& input,
@@ -289,12 +435,10 @@ std::vector<ChunkMatch> ChunkDB::search(const std::string& query, std::size_t k,
                                         RetrievalMode mode,
                                         bool expand_query_terms)
 {
-    static constexpr char retrieval_instruction[] =
-        "Given a question about a software repository, retrieve code snippets that are appropriate responses to the question.";
     std::vector<float> query_embedding;
     if (mode != RetrievalMode::Keyword) {
         const std::string embedding_input = use_retrieval_instruction
-            ? "<instruct>" + std::string(retrieval_instruction) + "\n<query>" + query
+            ? "<instruct>Given a question about a software repository, retrieve code snippets that are appropriate responses to the question.\n<query>" + query
             : query;
         query_embedding = embed(embedding_input, true, false);
         if (query_embedding.empty()) return {};

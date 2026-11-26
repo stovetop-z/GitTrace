@@ -14,12 +14,12 @@ For each task, review the prepared GitTrace results and the matching `git grep` 
 
 The GitTrace output uses hybrid retrieval with query expansion and Laya/Gemini reranking disabled. It indexes the repository history using the local `.gittraceignore` rules shown below. `git grep` searches the `HEAD` snapshot. This is the comparison setup for this exercise.
 
-| Scenario | Task card with both tools' complete outputs |
-|---|---|
-| A | [Older revisions](scenario-a-search.txt) |
-| B | [Ignore rules in history](scenario-b-search.txt) |
-| C | [Reranker instructions](scenario-c-search.txt) |
-| D | [Unavailable reranker](scenario-d-search.txt) |
+| Scenario | GitTrace hybrid top 5 | `git grep` output |
+|---|---|---|
+| A | [Prepared GitTrace results](../engineer-survey-hybrid-results.txt) | [Scenario A output](../git-grep-scenario-A.txt) |
+| B | [Prepared GitTrace results](../engineer-survey-hybrid-results.txt) | [Scenario B output](../git-grep-scenario-B.txt) |
+| C | [Prepared GitTrace results](../engineer-survey-hybrid-results.txt) | [Scenario C output](../git-grep-scenario-C.txt) |
+| D | [Prepared GitTrace results](../engineer-survey-hybrid-results.txt) | [Scenario D output](../git-grep-scenario-D.txt) |
 
 The GitTrace result file contains the four tasks in A–D order. Use the matching `Query:` heading. If reproducing the run rather than reviewing prepared output, use repository revision `d77c3ccebcd22970ed4b21c58d35a810b60fa72b`, a Release build, and top 5 hybrid results with `--no-laya` and query expansion off. The index contains 239 chunks. The active `.gittraceignore` is:
 

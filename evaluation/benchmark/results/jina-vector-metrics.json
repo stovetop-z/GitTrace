@@ -1,0 +1,928 @@
+{
+  "model": "jinaai/jina-embeddings-v2-base-code",
+  "device": "mps",
+  "max_seq_length": 2048,
+  "retrieval": "cosine vector search, no reranking",
+  "overall": {
+    "questions": 18,
+    "precision_at_5": 0.23333333333333334,
+    "recall_at_5": 0.7222222222222222,
+    "mrr": 0.4148148148148148
+  },
+  "by_repo": {
+    "gittrace": {
+      "questions": 9,
+      "precision_at_5": 0.15555555555555556,
+      "recall_at_5": 0.5555555555555556,
+      "mrr": 0.37777777777777777
+    },
+    "llama_cpp": {
+      "questions": 9,
+      "precision_at_5": 0.3111111111111111,
+      "recall_at_5": 0.8888888888888888,
+      "mrr": 0.45185185185185184
+    }
+  },
+  "questions": [
+    {
+      "question_id": "gt-01",
+      "repo": "gittrace",
+      "retrieved": [
+        {
+          "rank": 1,
+          "path": "GitTrace/chunkdb/chunkdb.cpp",
+          "start_line": 346,
+          "end_line": 377,
+          "cosine": 0.646424412727356,
+          "relevant": false
+        },
+        {
+          "rank": 2,
+          "path": "GitTrace/chunkdb/chunkdb.cpp",
+          "start_line": 315,
+          "end_line": 345,
+          "cosine": 0.6372779011726379,
+          "relevant": false
+        },
+        {
+          "rank": 3,
+          "path": "GitTrace/chunkdb/chunk.h",
+          "start_line": 50,
+          "end_line": 53,
+          "cosine": 0.6291729211807251,
+          "relevant": false
+        },
+        {
+          "rank": 4,
+          "path": "test.cpp",
+          "start_line": 54,
+          "end_line": 83,
+          "cosine": 0.5850085020065308,
+          "relevant": false
+        },
+        {
+          "rank": 5,
+          "path": "GitTrace/chunkdb/chunkdb.cpp",
+          "start_line": 168,
+          "end_line": 193,
+          "cosine": 0.5591375231742859,
+          "relevant": false
+        }
+      ],
+      "precision_at_5": 0.0,
+      "recall_at_5": 0.0,
+      "first_relevant_rank": null,
+      "reciprocal_rank": 0.0
+    },
+    {
+      "question_id": "gt-02",
+      "repo": "gittrace",
+      "retrieved": [
+        {
+          "rank": 1,
+          "path": "GitTrace/gittrace.cpp",
+          "start_line": 47,
+          "end_line": 75,
+          "cosine": 0.6243599653244019,
+          "relevant": false
+        },
+        {
+          "rank": 2,
+          "path": "GitTrace/gittrace.cpp",
+          "start_line": 76,
+          "end_line": 105,
+          "cosine": 0.6161332726478577,
+          "relevant": false
+        },
+        {
+          "rank": 3,
+          "path": "GitTrace/gittrace.cpp",
+          "start_line": 1,
+          "end_line": 46,
+          "cosine": 0.47665315866470337,
+          "relevant": false
+        },
+        {
+          "rank": 4,
+          "path": "test.cpp",
+          "start_line": 285,
+          "end_line": 309,
+          "cosine": 0.4367756247520447,
+          "relevant": false
+        },
+        {
+          "rank": 5,
+          "path": "GitTrace/gittrace.cpp",
+          "start_line": 240,
+          "end_line": 277,
+          "cosine": 0.436362624168396,
+          "relevant": true
+        }
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_5": 1.0,
+      "first_relevant_rank": 5,
+      "reciprocal_rank": 0.2
+    },
+    {
+      "question_id": "gt-03",
+      "repo": "gittrace",
+      "retrieved": [
+        {
+          "rank": 1,
+          "path": "GitTrace/gittrace.cpp",
+          "start_line": 47,
+          "end_line": 75,
+          "cosine": 0.7239272594451904,
+          "relevant": false
+        },
+        {
+          "rank": 2,
+          "path": "test.cpp",
+          "start_line": 223,
+          "end_line": 253,
+          "cosine": 0.6192044615745544,
+          "relevant": false
+        },
+        {
+          "rank": 3,
+          "path": "GitTrace/gittrace.cpp",
+          "start_line": 1,
+          "end_line": 46,
+          "cosine": 0.556243896484375,
+          "relevant": false
+        },
+        {
+          "rank": 4,
+          "path": "GitTrace/gittrace.cpp",
+          "start_line": 526,
+          "end_line": 555,
+          "cosine": 0.5426274538040161,
+          "relevant": false
+        },
+        {
+          "rank": 5,
+          "path": "GitTrace/gittrace.cpp",
+          "start_line": 240,
+          "end_line": 277,
+          "cosine": 0.5413447618484497,
+          "relevant": false
+        }
+      ],
+      "precision_at_5": 0.0,
+      "recall_at_5": 0.0,
+      "first_relevant_rank": null,
+      "reciprocal_rank": 0.0
+    },
+    {
+      "question_id": "gt-04",
+      "repo": "gittrace",
+      "retrieved": [
+        {
+          "rank": 1,
+          "path": "test.cpp",
+          "start_line": 150,
+          "end_line": 186,
+          "cosine": 0.5907647609710693,
+          "relevant": false
+        },
+        {
+          "rank": 2,
+          "path": "GitTrace/gittrace.cpp",
+          "start_line": 317,
+          "end_line": 342,
+          "cosine": 0.5687927007675171,
+          "relevant": false
+        },
+        {
+          "rank": 3,
+          "path": "test.cpp",
+          "start_line": 121,
+          "end_line": 149,
+          "cosine": 0.5467429161071777,
+          "relevant": false
+        },
+        {
+          "rank": 4,
+          "path": "GitTrace/chunkdb/index_store.cpp",
+          "start_line": 196,
+          "end_line": 228,
+          "cosine": 0.5422669649124146,
+          "relevant": false
+        },
+        {
+          "rank": 5,
+          "path": "test.cpp",
+          "start_line": 254,
+          "end_line": 284,
+          "cosine": 0.5416722297668457,
+          "relevant": false
+        }
+      ],
+      "precision_at_5": 0.0,
+      "recall_at_5": 0.0,
+      "first_relevant_rank": null,
+      "reciprocal_rank": 0.0
+    },
+    {
+      "question_id": "gt-05",
+      "repo": "gittrace",
+      "retrieved": [
+        {
+          "rank": 1,
+          "path": "GitTrace/chunkdb/index_store.cpp",
+          "start_line": 120,
+          "end_line": 147,
+          "cosine": 0.6840976476669312,
+          "relevant": false
+        },
+        {
+          "rank": 2,
+          "path": "GitTrace/chunkdb/index_store.cpp",
+          "start_line": 1,
+          "end_line": 51,
+          "cosine": 0.6780713796615601,
+          "relevant": false
+        },
+        {
+          "rank": 3,
+          "path": "test.cpp",
+          "start_line": 150,
+          "end_line": 186,
+          "cosine": 0.6360449194908142,
+          "relevant": false
+        },
+        {
+          "rank": 4,
+          "path": "GitTrace/chunkdb/index_store.cpp",
+          "start_line": 229,
+          "end_line": 255,
+          "cosine": 0.63056480884552,
+          "relevant": false
+        },
+        {
+          "rank": 5,
+          "path": "test.cpp",
+          "start_line": 121,
+          "end_line": 149,
+          "cosine": 0.5794855952262878,
+          "relevant": false
+        }
+      ],
+      "precision_at_5": 0.0,
+      "recall_at_5": 0.0,
+      "first_relevant_rank": null,
+      "reciprocal_rank": 0.0
+    },
+    {
+      "question_id": "gt-06",
+      "repo": "gittrace",
+      "retrieved": [
+        {
+          "rank": 1,
+          "path": "GitTrace/chunkdb/index_store.cpp",
+          "start_line": 229,
+          "end_line": 255,
+          "cosine": 0.688037633895874,
+          "relevant": false
+        },
+        {
+          "rank": 2,
+          "path": "GitTrace/chunkdb/index_store.cpp",
+          "start_line": 120,
+          "end_line": 147,
+          "cosine": 0.6804888248443604,
+          "relevant": false
+        },
+        {
+          "rank": 3,
+          "path": "GitTrace/chunkdb/index_store.cpp",
+          "start_line": 1,
+          "end_line": 51,
+          "cosine": 0.6777611970901489,
+          "relevant": false
+        },
+        {
+          "rank": 4,
+          "path": "test.cpp",
+          "start_line": 150,
+          "end_line": 186,
+          "cosine": 0.6769543290138245,
+          "relevant": false
+        },
+        {
+          "rank": 5,
+          "path": "GitTrace/chunkdb/index_store.cpp",
+          "start_line": 299,
+          "end_line": 334,
+          "cosine": 0.670903205871582,
+          "relevant": true
+        }
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_5": 1.0,
+      "first_relevant_rank": 5,
+      "reciprocal_rank": 0.2
+    },
+    {
+      "question_id": "gt-07",
+      "repo": "gittrace",
+      "retrieved": [
+        {
+          "rank": 1,
+          "path": "GitTrace/chunkdb/retrieval.cpp",
+          "start_line": 108,
+          "end_line": 143,
+          "cosine": 0.7801684141159058,
+          "relevant": true
+        },
+        {
+          "rank": 2,
+          "path": "GitTrace/chunkdb/chunkdb.cpp",
+          "start_line": 315,
+          "end_line": 345,
+          "cosine": 0.7355318069458008,
+          "relevant": false
+        },
+        {
+          "rank": 3,
+          "path": "GitTrace/chunkdb/retrieval.cpp",
+          "start_line": 144,
+          "end_line": 161,
+          "cosine": 0.6656789779663086,
+          "relevant": true
+        },
+        {
+          "rank": 4,
+          "path": "GitTrace/chunkdb/retrieval.cpp",
+          "start_line": 70,
+          "end_line": 107,
+          "cosine": 0.651918888092041,
+          "relevant": false
+        },
+        {
+          "rank": 5,
+          "path": "GitTrace/chunkdb/retrieval.cpp",
+          "start_line": 42,
+          "end_line": 69,
+          "cosine": 0.6471244096755981,
+          "relevant": false
+        }
+      ],
+      "precision_at_5": 0.4,
+      "recall_at_5": 1.0,
+      "first_relevant_rank": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "question_id": "gt-08",
+      "repo": "gittrace",
+      "retrieved": [
+        {
+          "rank": 1,
+          "path": "GitTrace/chunkdb/chunkdb.cpp",
+          "start_line": 315,
+          "end_line": 345,
+          "cosine": 0.702297568321228,
+          "relevant": true
+        },
+        {
+          "rank": 2,
+          "path": "GitTrace/chunkdb/chunkdb.cpp",
+          "start_line": 346,
+          "end_line": 377,
+          "cosine": 0.6602116823196411,
+          "relevant": true
+        },
+        {
+          "rank": 3,
+          "path": "main.cc",
+          "start_line": 156,
+          "end_line": 190,
+          "cosine": 0.5546338558197021,
+          "relevant": false
+        },
+        {
+          "rank": 4,
+          "path": "laya_service.py",
+          "start_line": 229,
+          "end_line": 250,
+          "cosine": 0.5460935235023499,
+          "relevant": false
+        },
+        {
+          "rank": 5,
+          "path": "GitTrace/chunkdb/retrieval.cpp",
+          "start_line": 144,
+          "end_line": 161,
+          "cosine": 0.5440337061882019,
+          "relevant": false
+        }
+      ],
+      "precision_at_5": 0.4,
+      "recall_at_5": 1.0,
+      "first_relevant_rank": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "question_id": "gt-09",
+      "repo": "gittrace",
+      "retrieved": [
+        {
+          "rank": 1,
+          "path": "main.cc",
+          "start_line": 191,
+          "end_line": 227,
+          "cosine": 0.5747424364089966,
+          "relevant": true
+        },
+        {
+          "rank": 2,
+          "path": "laya_service.py",
+          "start_line": 229,
+          "end_line": 250,
+          "cosine": 0.5267868041992188,
+          "relevant": false
+        },
+        {
+          "rank": 3,
+          "path": "laya_service.py",
+          "start_line": 1,
+          "end_line": 38,
+          "cosine": 0.5234664678573608,
+          "relevant": false
+        },
+        {
+          "rank": 4,
+          "path": "main.cc",
+          "start_line": 407,
+          "end_line": 445,
+          "cosine": 0.5199213027954102,
+          "relevant": false
+        },
+        {
+          "rank": 5,
+          "path": "laya_service.py",
+          "start_line": 199,
+          "end_line": 228,
+          "cosine": 0.5169984698295593,
+          "relevant": false
+        }
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_5": 1.0,
+      "first_relevant_rank": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "question_id": "llama-01",
+      "repo": "llama_cpp",
+      "retrieved": [
+        {
+          "rank": 1,
+          "path": "src/llama-model-loader.cpp",
+          "start_line": 675,
+          "end_line": 704,
+          "cosine": 0.7415876388549805,
+          "relevant": false
+        },
+        {
+          "rank": 2,
+          "path": "common/common.cpp",
+          "start_line": 1918,
+          "end_line": 1958,
+          "cosine": 0.7094142436981201,
+          "relevant": false
+        },
+        {
+          "rank": 3,
+          "path": "src/llama-model-loader.cpp",
+          "start_line": 551,
+          "end_line": 584,
+          "cosine": 0.6873232126235962,
+          "relevant": true
+        },
+        {
+          "rank": 4,
+          "path": "src/llama-model-loader.cpp",
+          "start_line": 705,
+          "end_line": 742,
+          "cosine": 0.6629597544670105,
+          "relevant": false
+        },
+        {
+          "rank": 5,
+          "path": "src/llama-model-loader.cpp",
+          "start_line": 644,
+          "end_line": 674,
+          "cosine": 0.635260820388794,
+          "relevant": false
+        }
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_5": 1.0,
+      "first_relevant_rank": 3,
+      "reciprocal_rank": 0.3333333333333333
+    },
+    {
+      "question_id": "llama-02",
+      "repo": "llama_cpp",
+      "retrieved": [
+        {
+          "rank": 1,
+          "path": "src/llama-model-loader.cpp",
+          "start_line": 614,
+          "end_line": 643,
+          "cosine": 0.5626696944236755,
+          "relevant": true
+        },
+        {
+          "rank": 2,
+          "path": "src/llama-model-loader.cpp",
+          "start_line": 585,
+          "end_line": 613,
+          "cosine": 0.5571456551551819,
+          "relevant": true
+        },
+        {
+          "rank": 3,
+          "path": "src/llama-model-loader.cpp",
+          "start_line": 1790,
+          "end_line": 1811,
+          "cosine": 0.5354587435722351,
+          "relevant": false
+        },
+        {
+          "rank": 4,
+          "path": "src/llama-model.cpp",
+          "start_line": 1295,
+          "end_line": 1327,
+          "cosine": 0.5256805419921875,
+          "relevant": false
+        },
+        {
+          "rank": 5,
+          "path": "src/llama-model-loader.cpp",
+          "start_line": 675,
+          "end_line": 704,
+          "cosine": 0.5172762870788574,
+          "relevant": false
+        }
+      ],
+      "precision_at_5": 0.4,
+      "recall_at_5": 1.0,
+      "first_relevant_rank": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "question_id": "llama-03",
+      "repo": "llama_cpp",
+      "retrieved": [
+        {
+          "rank": 1,
+          "path": "src/llama-model.cpp",
+          "start_line": 2576,
+          "end_line": 2609,
+          "cosine": 0.5001639723777771,
+          "relevant": false
+        },
+        {
+          "rank": 2,
+          "path": "tools/server/server-context.cpp",
+          "start_line": 1460,
+          "end_line": 1480,
+          "cosine": 0.4791756868362427,
+          "relevant": false
+        },
+        {
+          "rank": 3,
+          "path": "src/llama-context.cpp",
+          "start_line": 3806,
+          "end_line": 3831,
+          "cosine": 0.4739190936088562,
+          "relevant": true
+        },
+        {
+          "rank": 4,
+          "path": "tools/server/server-context.cpp",
+          "start_line": 1328,
+          "end_line": 1358,
+          "cosine": 0.4734044671058655,
+          "relevant": false
+        },
+        {
+          "rank": 5,
+          "path": "src/llama-context.cpp",
+          "start_line": 3778,
+          "end_line": 3805,
+          "cosine": 0.46827152371406555,
+          "relevant": true
+        }
+      ],
+      "precision_at_5": 0.4,
+      "recall_at_5": 1.0,
+      "first_relevant_rank": 3,
+      "reciprocal_rank": 0.3333333333333333
+    },
+    {
+      "question_id": "llama-04",
+      "repo": "llama_cpp",
+      "retrieved": [
+        {
+          "rank": 1,
+          "path": "src/llama-grammar.cpp",
+          "start_line": 1085,
+          "end_line": 1121,
+          "cosine": 0.6236188411712646,
+          "relevant": true
+        },
+        {
+          "rank": 2,
+          "path": "src/llama-grammar.cpp",
+          "start_line": 1362,
+          "end_line": 1404,
+          "cosine": 0.6043444871902466,
+          "relevant": false
+        },
+        {
+          "rank": 3,
+          "path": "src/llama-grammar.cpp",
+          "start_line": 1043,
+          "end_line": 1084,
+          "cosine": 0.5911843776702881,
+          "relevant": true
+        },
+        {
+          "rank": 4,
+          "path": "src/llama-grammar.cpp",
+          "start_line": 1122,
+          "end_line": 1163,
+          "cosine": 0.5818266868591309,
+          "relevant": true
+        },
+        {
+          "rank": 5,
+          "path": "src/llama-grammar.cpp",
+          "start_line": 914,
+          "end_line": 955,
+          "cosine": 0.5736916065216064,
+          "relevant": false
+        }
+      ],
+      "precision_at_5": 0.6,
+      "recall_at_5": 1.0,
+      "first_relevant_rank": 1,
+      "reciprocal_rank": 1.0
+    },
+    {
+      "question_id": "llama-05",
+      "repo": "llama_cpp",
+      "retrieved": [
+        {
+          "rank": 1,
+          "path": "src/llama-kv-cache.cpp",
+          "start_line": 2329,
+          "end_line": 2375,
+          "cosine": 0.6827685236930847,
+          "relevant": false
+        },
+        {
+          "rank": 2,
+          "path": "src/llama-kv-cache.cpp",
+          "start_line": 898,
+          "end_line": 933,
+          "cosine": 0.6632896065711975,
+          "relevant": true
+        },
+        {
+          "rank": 3,
+          "path": "src/llama-kv-cache.cpp",
+          "start_line": 1060,
+          "end_line": 1113,
+          "cosine": 0.6412079334259033,
+          "relevant": true
+        },
+        {
+          "rank": 4,
+          "path": "tools/server/server-context.cpp",
+          "start_line": 3690,
+          "end_line": 3722,
+          "cosine": 0.6188735961914062,
+          "relevant": false
+        },
+        {
+          "rank": 5,
+          "path": "src/llama-kv-cache.cpp",
+          "start_line": 2474,
+          "end_line": 2519,
+          "cosine": 0.616317629814148,
+          "relevant": false
+        }
+      ],
+      "precision_at_5": 0.4,
+      "recall_at_5": 1.0,
+      "first_relevant_rank": 2,
+      "reciprocal_rank": 0.5
+    },
+    {
+      "question_id": "llama-06",
+      "repo": "llama_cpp",
+      "retrieved": [
+        {
+          "rank": 1,
+          "path": "src/llama-vocab.cpp",
+          "start_line": 3253,
+          "end_line": 3280,
+          "cosine": 0.6784708499908447,
+          "relevant": false
+        },
+        {
+          "rank": 2,
+          "path": "src/llama-vocab.cpp",
+          "start_line": 2223,
+          "end_line": 2254,
+          "cosine": 0.6315820217132568,
+          "relevant": false
+        },
+        {
+          "rank": 3,
+          "path": "src/llama-vocab.cpp",
+          "start_line": 1020,
+          "end_line": 1040,
+          "cosine": 0.6281979084014893,
+          "relevant": false
+        },
+        {
+          "rank": 4,
+          "path": "src/llama-arch.cpp",
+          "start_line": 395,
+          "end_line": 409,
+          "cosine": 0.6275590658187866,
+          "relevant": false
+        },
+        {
+          "rank": 5,
+          "path": "src/llama-vocab.cpp",
+          "start_line": 2945,
+          "end_line": 2970,
+          "cosine": 0.6170138716697693,
+          "relevant": false
+        }
+      ],
+      "precision_at_5": 0.0,
+      "recall_at_5": 0.0,
+      "first_relevant_rank": null,
+      "reciprocal_rank": 0.0
+    },
+    {
+      "question_id": "llama-07",
+      "repo": "llama_cpp",
+      "retrieved": [
+        {
+          "rank": 1,
+          "path": "common/chat.cpp",
+          "start_line": 668,
+          "end_line": 699,
+          "cosine": 0.6953479051589966,
+          "relevant": false
+        },
+        {
+          "rank": 2,
+          "path": "common/chat.cpp",
+          "start_line": 1377,
+          "end_line": 1408,
+          "cosine": 0.6879063844680786,
+          "relevant": true
+        },
+        {
+          "rank": 3,
+          "path": "common/chat.cpp",
+          "start_line": 1409,
+          "end_line": 1442,
+          "cosine": 0.6635621786117554,
+          "relevant": true
+        },
+        {
+          "rank": 4,
+          "path": "tools/server/server-context.cpp",
+          "start_line": 1439,
+          "end_line": 1459,
+          "cosine": 0.6376027464866638,
+          "relevant": false
+        },
+        {
+          "rank": 5,
+          "path": "common/chat.cpp",
+          "start_line": 1140,
+          "end_line": 1169,
+          "cosine": 0.6245705485343933,
+          "relevant": false
+        }
+      ],
+      "precision_at_5": 0.4,
+      "recall_at_5": 1.0,
+      "first_relevant_rank": 2,
+      "reciprocal_rank": 0.5
+    },
+    {
+      "question_id": "llama-08",
+      "repo": "llama_cpp",
+      "retrieved": [
+        {
+          "rank": 1,
+          "path": "tools/server/server.cpp",
+          "start_line": 231,
+          "end_line": 252,
+          "cosine": 0.5701400637626648,
+          "relevant": false
+        },
+        {
+          "rank": 2,
+          "path": "tools/server/server.cpp",
+          "start_line": 287,
+          "end_line": 314,
+          "cosine": 0.5282289981842041,
+          "relevant": false
+        },
+        {
+          "rank": 3,
+          "path": "tools/server/server.cpp",
+          "start_line": 253,
+          "end_line": 269,
+          "cosine": 0.5186803340911865,
+          "relevant": false
+        },
+        {
+          "rank": 4,
+          "path": "tools/server/server.cpp",
+          "start_line": 205,
+          "end_line": 230,
+          "cosine": 0.479026198387146,
+          "relevant": false
+        },
+        {
+          "rank": 5,
+          "path": "tools/server/server.cpp",
+          "start_line": 270,
+          "end_line": 286,
+          "cosine": 0.4713359773159027,
+          "relevant": true
+        }
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_5": 1.0,
+      "first_relevant_rank": 5,
+      "reciprocal_rank": 0.2
+    },
+    {
+      "question_id": "llama-09",
+      "repo": "llama_cpp",
+      "retrieved": [
+        {
+          "rank": 1,
+          "path": "src/llama-sampler.cpp",
+          "start_line": 4337,
+          "end_line": 4377,
+          "cosine": 0.6147783994674683,
+          "relevant": false
+        },
+        {
+          "rank": 2,
+          "path": "src/llama-sampler.cpp",
+          "start_line": 697,
+          "end_line": 749,
+          "cosine": 0.6137164831161499,
+          "relevant": false
+        },
+        {
+          "rank": 3,
+          "path": "src/llama-sampler.cpp",
+          "start_line": 4378,
+          "end_line": 4385,
+          "cosine": 0.5969385504722595,
+          "relevant": false
+        },
+        {
+          "rank": 4,
+          "path": "src/llama-sampler.cpp",
+          "start_line": 647,
+          "end_line": 696,
+          "cosine": 0.5965481996536255,
+          "relevant": false
+        },
+        {
+          "rank": 5,
+          "path": "src/llama-sampler.cpp",
+          "start_line": 951,
+          "end_line": 1015,
+          "cosine": 0.5893244743347168,
+          "relevant": true
+        }
+      ],
+      "precision_at_5": 0.2,
+      "recall_at_5": 1.0,
+      "first_relevant_rank": 5,
+      "reciprocal_rank": 0.2
+    }
+  ]
+}

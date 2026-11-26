@@ -12,8 +12,10 @@
 
 struct GitTraceProgress
 {
-    uint64_t embedding_attempts = 0;
+    uint64_t embedding_inputs = 0;
     uint64_t chunks_completed = 0;
+    uint64_t embedding_model_calls = 0;
+    uint64_t embedding_failures = 0;
     double elapsed_ms = 0.0;
     bool complete = false;
 };
@@ -27,7 +29,11 @@ struct GitTraceMetrics
     uint64_t parsed_files = 0;
     uint64_t failed_files = 0;
     uint64_t chunks_created = 0;
-    uint64_t embedding_calls = 0;
+    uint64_t embedding_inputs = 0;
+    uint64_t embedding_model_calls = 0;
+    uint64_t embedding_failures = 0;
+    std::string embedding_model_path;
+    int32_t embedding_pooling_type = LLAMA_POOLING_TYPE_UNSPECIFIED;
     uint64_t search_calls = 0;
     int32_t embedding_threads = 0;
     std::string embedding_backend = "not initialized";
@@ -70,7 +76,7 @@ public:
     bool init(const char* path, bool activate_chunkdb);
     bool beginGitTrace(bool use_index_cache = true, bool force_rebuild = false);
     std::vector<ChunkMatch> searchChunks(const std::string& query, std::size_t k = 5,
-                                         bool use_retrieval_instruction = true,
+                                         bool use_retrieval_instruction = false,
                                          RetrievalMode mode = RetrievalMode::Hybrid,
                                          bool expand_query_terms = false);
 
@@ -78,6 +84,10 @@ public:
     const GitTraceMetrics& getMetrics() const { return metrics; }
     std::string indexStatus() const;
     void setIndexPath(const std::string& path) { index_path_override = path; }
+    void setEmbeddingModel(const std::string& path) {
+        chunkdb.setModelPath(path);
+        metrics.embedding_model_path = path;
+    }
     void setProgressCallback(std::function<void(const GitTraceProgress&)> callback) {
         progress_callback = std::move(callback);
     }

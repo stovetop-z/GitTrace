@@ -185,7 +185,7 @@ std::string grammar_fingerprint()
 }
 
 std::string cache_manifest(git_repository* repo, const std::filesystem::path& root,
-                           bool include_head = true)
+                           const std::string& model_path, bool include_head = true)
 {
 #if defined(__APPLE__) && defined(__aarch64__)
     constexpr char platform[] = "macos-arm64";
@@ -205,8 +205,7 @@ std::string cache_manifest(git_repository* repo, const std::filesystem::path& ro
     if (target) git_oid_tostr(head_sha, sizeof(head_sha), target);
     git_reference_free(head);
 
-    const std::filesystem::path model = std::filesystem::absolute(
-        "GitTrace/chunkdb/embedder/bge-code-v1-q8_0.gguf");
+    const std::filesystem::path model = std::filesystem::absolute(model_path);
     std::error_code ec;
     const auto model_size = std::filesystem::file_size(model, ec);
     const auto model_time = std::filesystem::last_write_time(model, ec).time_since_epoch().count();
@@ -217,7 +216,8 @@ std::string cache_manifest(git_repository* repo, const std::filesystem::path& ro
            ";model_mtime=" + std::to_string(static_cast<long long>(model_time)) +
            ";rules=" + rules + ";grammars=" + grammar +
            ";platform=" + platform + ";embedding=float32-native" +
-           ";chunker=1500-v1;embed-input=source-v1";
+           ";chunker=1500-v1;embed-input=source-v1;pooling=model-native;query=raw" +
+           ";embed-batch=seq4-token-budget-v1";
     if (include_head) manifest += ";head=" + std::string(head_sha);
     return manifest;
 }
@@ -309,7 +309,7 @@ bool GitTrace::beginGitTrace(bool use_index_cache, bool force_rebuild)
     std::string config_manifest;
     if (activate_chunkdb && use_index_cache) {
         const auto manifest_started = Clock::now();
-        manifest = cache_manifest(repo, repository_root, true);
+        manifest = cache_manifest(repo, repository_root, chunkdb.modelPath(), true);
         config_manifest = cache_config(manifest);
         metrics.manifest_ms += std::chrono::duration<double, std::milli>(
             Clock::now() - manifest_started).count();
@@ -565,7 +565,7 @@ bool GitTrace::beginGitTrace(bool use_index_cache, bool force_rebuild)
         Clock::now() - grammar_started).count();
     if (activate_chunkdb && use_index_cache) {
         const auto manifest_started = Clock::now();
-        manifest = cache_manifest(repo, repository_root, true);
+        manifest = cache_manifest(repo, repository_root, chunkdb.modelPath(), true);
         config_manifest = cache_config(manifest);
         metrics.manifest_ms += std::chrono::duration<double, std::milli>(
             Clock::now() - manifest_started).count();
@@ -604,7 +604,13 @@ bool GitTrace::beginGitTrace(bool use_index_cache, bool force_rebuild)
         }
         metrics.embedding_backend = chunkdb.backendName();
         metrics.embedding_threads = chunkdb.embeddingThreads();
+        metrics.embedding_pooling_type = chunkdb.poolingType();
         chunkify(tree_sitter);
+        if (metrics.embedding_failures > 0) {
+            std::cerr << "Embedding failed for " << metrics.embedding_failures
+                      << " chunk(s); refusing to save or use an incomplete index.\n";
+            return false;
+        }
         if (use_index_cache && !manifest.empty()) {
             std::string store_error;
             const auto save_started = Clock::now();
@@ -646,7 +652,8 @@ std::string GitTrace::indexStatus() const
     const std::filesystem::path path = index_path_override.empty()
         ? root / ".gittrace" / "index.sqlite"
         : std::filesystem::absolute(index_path_override);
-    const auto status = gittrace::index::inspect(path.string(), cache_manifest(repo, root));
+    const auto status = gittrace::index::inspect(path.string(),
+        cache_manifest(repo, root, chunkdb.modelPath()));
     if (!status.exists) return "No local index at " + path.string() + " (" + status.detail + ")";
     return std::string(status.compatible ? "Index ready" : "Index stale") + ": " +
            std::to_string(status.chunks) + " chunks at " + path.string() +
@@ -658,30 +665,43 @@ void GitTrace::chunkify(const TreeSitter& tree_sitter)
     using Clock = std::chrono::steady_clock;
     const auto chunking_started = Clock::now();
     std::cout << "Creating chunks to send through embedder...\n";
-    constexpr size_t MAX_FALLBACK_BYTES = 1500;
+    constexpr size_t MAX_CHUNK_BYTES = 1500;
     size_t total_chunks = 0;
     const double embedding_ms_before = metrics.chunk_embedding_ms;
-    auto embed_chunk = [&](const std::string& content, const Blob& blob,
-                           uint32_t start_line, uint32_t end_line,
-                           const std::string& syntax_type, uint32_t ordinal) {
-        const auto embedding_started = Clock::now();
-        ++metrics.embedding_calls;
-        auto result = chunkdb.embed(content, true, true, blob.sha, blob.filepath,
-                                    start_line, end_line, blob.time_mod, syntax_type,
-                                    0, ordinal, blob.occurrences);
-        metrics.chunk_embedding_ms += std::chrono::duration<double, std::milli>(
-            Clock::now() - embedding_started).count();
-        return result;
-    };
+    constexpr std::size_t MAX_PENDING_CHUNKS = 32;
+    std::vector<ChunkEmbeddingInput> pending;
+    pending.reserve(MAX_PENDING_CHUNKS);
     auto report_progress = [&](bool complete) {
         if (!progress_callback) return;
         GitTraceProgress progress;
-        progress.embedding_attempts = metrics.embedding_calls;
+        progress.embedding_inputs = metrics.embedding_inputs;
         progress.chunks_completed = total_chunks;
+        progress.embedding_model_calls = metrics.embedding_model_calls;
+        progress.embedding_failures = metrics.embedding_failures;
         progress.elapsed_ms = std::chrono::duration<double, std::milli>(
             Clock::now() - chunking_started).count();
         progress.complete = complete;
         progress_callback(progress);
+    };
+    auto flush_pending = [&]() {
+        if (pending.empty()) return;
+        const auto embedding_started = Clock::now();
+        metrics.embedding_inputs += pending.size();
+        const ChunkBatchResult result = chunkdb.embedBatch(pending);
+        metrics.embedding_model_calls += result.model_calls;
+        metrics.embedding_failures += result.failed_chunks;
+        metrics.chunk_embedding_ms += std::chrono::duration<double, std::milli>(
+            Clock::now() - embedding_started).count();
+        total_chunks += result.embedded_chunks;
+        pending.clear();
+        report_progress(false);
+    };
+    auto queue_chunk = [&](const std::string& content, const Blob& blob,
+                           uint32_t start_line, uint32_t end_line,
+                           const std::string& syntax_type, uint32_t ordinal) {
+        pending.push_back({content, blob.sha, blob.filepath, start_line, end_line,
+                           blob.time_mod, syntax_type, 0, ordinal, blob.occurrences});
+        if (pending.size() >= MAX_PENDING_CHUNKS) flush_pending();
     };
     for (const Blob& blob : blobs) {
         if (blob.raw_data.empty()) continue;
@@ -690,18 +710,16 @@ void GitTrace::chunkify(const TreeSitter& tree_sitter)
         const std::vector<SyntaxSpan> spans = tree_sitter.extractSpans(blob.filepath, source, length);
 
         if (spans.empty()) {
-            for (size_t offset = 0; offset < length; offset += MAX_FALLBACK_BYTES) {
-                const size_t chunk_length = std::min(MAX_FALLBACK_BYTES, length - offset);
+            for (size_t offset = 0; offset < length; offset += MAX_CHUNK_BYTES) {
+                const size_t chunk_length = std::min(MAX_CHUNK_BYTES, length - offset);
                 uint32_t start_line = 1;
                 for (size_t i = 0; i < offset; ++i) if (source[i] == '\n') ++start_line;
                 uint32_t end_line = start_line;
                 for (size_t i = offset; i < offset + chunk_length; ++i) if (source[i] == '\n') ++end_line;
                 if (chunk_length && source[offset + chunk_length - 1] == '\n' && end_line > start_line) --end_line;
                 const std::string content(source + offset, chunk_length);
-                const auto embedding = embed_chunk(content, blob, start_line,
+                queue_chunk(content, blob, start_line,
                     std::max(start_line, end_line), "fallback", 0);
-                if (!embedding.empty()) ++total_chunks;
-                if (metrics.embedding_calls % 10 == 0) report_progress(false);
             }
             continue;
         }
@@ -712,12 +730,12 @@ void GitTrace::chunkify(const TreeSitter& tree_sitter)
             size_t offset = span.start_byte;
             uint32_t start_line = span.start_row;
             while (offset < span.end_byte) {
-                size_t end = std::min<size_t>(span.end_byte, offset + MAX_FALLBACK_BYTES);
+                size_t end = std::min<size_t>(span.end_byte, offset + MAX_CHUNK_BYTES);
                 if (end < span.end_byte) {
                     const size_t newline = std::string_view(source + offset, end - offset).rfind('\n');
                     if (newline != std::string_view::npos) end = offset + newline + 1;
                 }
-                if (end <= offset) end = std::min<size_t>(span.end_byte, offset + MAX_FALLBACK_BYTES);
+                if (end <= offset) end = std::min<size_t>(span.end_byte, offset + MAX_CHUNK_BYTES);
 
                 const std::string content(source + offset, end - offset);
                 uint32_t line_count = 0;
@@ -726,15 +744,13 @@ void GitTrace::chunkify(const TreeSitter& tree_sitter)
                 if (line_count > 0 && source[end - 1] == '\n') --end_line;
                 end_line = std::max(start_line, std::min(end_line, span.end_row));
 
-                const auto embedding = embed_chunk(content, blob, start_line, end_line,
-                                                   span.type, ordinal++);
-                if (!embedding.empty()) ++total_chunks;
-                if (metrics.embedding_calls % 10 == 0) report_progress(false);
+                queue_chunk(content, blob, start_line, end_line, span.type, ordinal++);
                 offset = end;
                 start_line += line_count;
             }
         }
     }
+    flush_pending();
     report_progress(true);
     metrics.chunking_ms = std::max(0.0, std::chrono::duration<double, std::milli>(
         Clock::now() - chunking_started).count() -
